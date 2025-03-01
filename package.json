@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "concurrently": "^9.1.2",
-    "wait-on": "^8.0.2"
-  }
-}

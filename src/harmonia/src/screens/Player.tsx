@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect, MouseEventHandler, MouseEvent } from 'react';
-import { Settings, Library, ChevronLeft, ChevronRight, Play, Pause, SkipForward, SkipBack, Maximize2, Minimize2, X, Music, Search, Home } from 'lucide-react';
-import Song from 'src/types/song';
+import { useState, useRef, useEffect } from 'react';
+import { Settings, Library, Play, X, Music, Search, Home } from 'lucide-react';
+import { Song } from '../types/song';
 import Playlist from 'src/types/playlist';
+import PlayerPanel from '../components/PlayerPanel';
 
 
 interface InputModalProps {
@@ -68,24 +69,60 @@ const MusicPlayer = () => {
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null); // Track selected playlist for adding songs
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFolderWatched, setIsFolderWatched] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Load cached library and playlists on mount
   useEffect(() => {
     async function loadData() {
-      const cachedLibrary: Song[] = await window.electronAPI.loadLibrary() || [];
-      setMusicLibrary(cachedLibrary);
-      setFilteredLibrary(cachedLibrary);
+      // Nouveau gestionnaire pour charger la bibliothèque initiale
+      const result = await window.electronAPI.initLibrary();
+      console.log(result);
+      if (result) {
+        setMusicLibrary(result.library || []);
+        setFilteredLibrary(result.library || []);
+        setIsFolderWatched(!!result.folder);
+      }
 
-      const cachedPlaylists: Playlist[] = await window.electronAPI.loadPlaylists() || [];
+      const cachedPlaylists: Playlist[] = await window.electronAPI.loadPlaylists();
+      console.log(cachedPlaylists);
       setPlaylists(cachedPlaylists);
+
+      // Écouter les mises à jour de la bibliothèque (avec les fichiers ajoutés/modifiés/supprimés)
+      window.electronAPI.onLibraryUpdated((updatedLibrary: Song[]) => {
+        setMusicLibrary(updatedLibrary);
+        setFilteredLibrary(prev => {
+          // Préserver le filtrage et le tri actuels
+          if (searchQuery) {
+            return applySearchFilter(updatedLibrary, searchQuery);
+          }
+          return updatedLibrary;
+        });
+      });
     }
+
     loadData();
+
+    // Cleanup listener
+    return () => {
+      window.electronAPI.removeLibraryUpdatedListener();
+    };
   }, []);
+
+  // Fonction d'aide pour filtrage
+  const applySearchFilter = (library: Song[], query: string) => {
+    const q = query.toLowerCase();
+    return library.filter(song =>
+      song.title?.toLowerCase().includes(q) ||
+      song.artist?.toLowerCase().includes(q) ||
+      song.album?.toLowerCase().includes(q) ||
+      song.genre?.toLowerCase().includes(q)
+    );
+  };
 
   // Save playlists when updated
   useEffect(() => {
-    window.electronAPI?.savePlaylists(playlists);
+    if (playlists.length !== 0) window.electronAPI?.savePlaylists(playlists);
   }, [playlists]);
 
   // Handle filtering library based on search query
@@ -155,10 +192,11 @@ const MusicPlayer = () => {
   };
 
   const scanFolder = async () => {
-    const library = await window.electronAPI?.selectFolder();
-    if (library) {
-      setMusicLibrary(library);
-      setFilteredLibrary(library);
+    const result = await window.electronAPI.selectFolder();
+    if (result) {
+      setMusicLibrary(result);
+      setFilteredLibrary(result);
+      window.electronAPI.saveLibrary(result);
     }
   };
 
@@ -187,7 +225,6 @@ const MusicPlayer = () => {
   const playPlaylist = (playlist: { name: string; songs: Song[] }) => {
     setNowPlaying(playlist.songs);
     setCurrentSongIndex(0);
-    playCurrentSong();
   };
 
   const togglePlayPause = () => {
@@ -195,7 +232,7 @@ const MusicPlayer = () => {
       if (isPlaying) {
         audioRef.current.pause();
       } else if (currentSongIndex !== null && nowPlaying[currentSongIndex]) {
-        audioRef.current.src = nowPlaying[currentSongIndex].path;
+        if (audioRef.current.src === '') audioRef.current.src = nowPlaying[currentSongIndex].path;
         audioRef.current.play().catch((err) => console.error('Playback failed:', err));
       }
       setIsPlaying(!isPlaying);
@@ -221,9 +258,13 @@ const MusicPlayer = () => {
   };
 
   const shuffleSongs = () => {
+    if (nowPlaying.length === 0) {
+      setNowPlaying(filteredLibrary);
+      if (nowPlaying.length === 0) return;
+    }
     const shuffled = [...nowPlaying].sort(() => Math.random() - 0.5);
-    setNowPlaying(shuffled);
     setCurrentSongIndex(0);
+    setNowPlaying(shuffled);
     playCurrentSong();
   };
 
@@ -294,13 +335,12 @@ const MusicPlayer = () => {
     createPlaylist(value);
   };
 
+
   return (
     <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
       <div className="w-16 bg-gray-900 flex flex-col items-center py-4">
         <div className="mb-8 flex flex-col items-center gap-10">
-          <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center">
-            <span className="text-xs font-bold">JD</span>
-          </div>
+
           <div className="flex flex-col gap-5 items-center">
             <button className="p-3 rounded-full hover:bg-gray-800" onClick={() => setViewMode("featured")}>
               <Home size={viewMode === "featured" ? 30 : 25} color={viewMode === "featured" ? "purple" : "white"} />
@@ -460,26 +500,26 @@ const MusicPlayer = () => {
               <div className="bg-gray-800 rounded-t-lg px-4 py-2 text-xs font-medium">
                 <div className="flex items-center">
                   <div className="w-8 text-center">
-                    <input
-                      type="checkbox"
-                      className="rounded text-purple-600 focus:ring-purple-500"
-                      checked={selectMode && selectedSongs.length === filteredLibrary.length && filteredLibrary.length > 0}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedSongs([...filteredLibrary]);
-                        } else {
-                          setSelectedSongs([]);
-                        }
-                      }}
-                      disabled={!selectMode}
-                    />
-                  </div>
-                  <div
-                    className="w-8 cursor-pointer hover:text-purple-400"
-                    onClick={() => requestSort('id')}
-                  >
-                    #
-                    {getSortIndicator('id')}
+                    {selectMode ?
+                      <input
+                        type="checkbox"
+                        className="rounded text-purple-600 focus:ring-purple-500"
+                        checked={selectMode && selectedSongs.length === filteredLibrary.length && filteredLibrary.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSongs([...filteredLibrary]);
+                          } else {
+                            setSelectedSongs([]);
+                          }
+                        }}
+                        disabled={!selectMode}
+                      />
+                      :
+                      <button
+                        className="rounded w-8 text-purple-600 focus:ring-purple-500"
+                        onClick={() => setSelectMode(true)} />
+                    }
+
                   </div>
                   <div
                     className="w-1/3 cursor-pointer hover:text-purple-400"
@@ -534,7 +574,7 @@ const MusicPlayer = () => {
 
                     return (
                       <div
-                        key={index}
+                        key={song.id}
                         className={`group flex items-center px-4 py-2 text-xs border-b border-gray-700 hover:bg-gray-700 transition-colors ${isNowPlaying ? 'bg-gray-700 border-l-4 border-l-purple-500' : ''
                           }`}
                         onClick={() => {
@@ -571,7 +611,6 @@ const MusicPlayer = () => {
                             </div>
                           )}
                         </div>
-                        <div className="w-8">{song.id}</div>
                         <div className="w-1/3 truncate">
                           <span className={isNowPlaying ? "text-purple-400 font-medium" : ""}>{song.title}</span>
                         </div>
@@ -632,127 +671,10 @@ const MusicPlayer = () => {
         </div>
       </div>
       {/* Player Section */}
-      {playerView !== 'hidden' && (
-        <div
-          className={`bg-gray-900 border-l border-gray-800 transition-all duration-300 ease-in-out
-            ${playerView === 'sideview' ? 'w-80 translate-x-0 opacity-100' : 'fixed inset-0 z-50 w-full translate-x-0 scale-100 opacity-100'}
-            ${playerView === 'hidden' ? 'translate-x-full opacity-0' : ''}`}
-        >
-          <div className={`p-4 ${playerView === 'fullview' ? 'inline h-full mx-auto' : ''}`}>
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-2">
-                <button onClick={closePlayerView} className="p-1 rounded-full hover:bg-gray-800">
-                  <ChevronLeft size={18} />
-                </button>
-                <button className="p-1 rounded-full hover:bg-gray-800">•••</button>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={togglePlayerView} className="p-1 rounded-full hover:bg-gray-800">
-                  {playerView === 'fullview' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                </button>
-                {playerView === 'fullview' && (
-                  <button onClick={closePlayerView} className="p-1 rounded-full hover:bg-gray-800">
-                    <X size={18} />
-                  </button>
-                )}
-              </div>
-            </div>
+      <PlayerPanel audioRef={audioRef} closePlayerView={closePlayerView} togglePlayerView={togglePlayerView} togglePlayPause={togglePlayPause}
+        prevSong={prevSong} nextSong={nextSong} replaySong={replaySong} shuffleSongs={shuffleSongs} setCurrentSongIndex={setCurrentSongIndex}
+        playerView={playerView} duration={duration} currentTime={currentTime} isPlaying={isPlaying} currentSongIndex={currentSongIndex} nowPlaying={nowPlaying} />
 
-            <div className={`flex ${playerView === 'fullview' ? 'flex-row items-center gap-6' : 'flex-col items-center'}`}>
-              <div
-                className={`${playerView === 'fullview' ? 'w-72 h-72 rounded-2xl' : 'w-full aspect-square'} mb-4 flex-shrink-0`}
-                style={{
-                  backgroundImage: currentSongIndex !== null && nowPlaying[currentSongIndex]?.cover
-                    ? `url(${nowPlaying[currentSongIndex].cover})`
-                    : null,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                }}
-              ></div>
-              <div className={`${playerView === 'fullview' ? 'flex-1' : 'w-full'}`}>
-                <div className={`${playerView === 'fullview' ? "text-left" : "text-center"} mb-4`}>
-                  <h3 className="text-xl font-bold">
-                    {currentSongIndex !== null && nowPlaying[currentSongIndex] ? nowPlaying[currentSongIndex].title : 'No Song'}
-                  </h3>
-                  <p className="text-sm text-gray-400">
-                    {currentSongIndex !== null && nowPlaying[currentSongIndex] ? nowPlaying[currentSongIndex].artist || 'Unknown' : ''}
-                  </p>
-                </div>
-                <div className="flex flex-col items-center gap-4">
-                  <div className="flex items-center gap-4">
-                    <button onClick={prevSong} className="p-2 rounded-full hover:bg-gray-800">
-                      <SkipBack size={20} />
-                    </button>
-                    <button onClick={togglePlayPause} className="p-3 rounded-full bg-red-500 text-white hover:bg-red-600">
-                      {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-                    </button>
-                    <button onClick={nextSong} className="p-2 rounded-full hover:bg-gray-800">
-                      <SkipForward size={20} />
-                    </button>
-                  </div>
-                  <div className="w-full flex items-center gap-2">
-                    <span className="text-xs text-gray-400">{currentTime}</span>
-                    <div className="w-full h-1 bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-400 rounded-full"
-                        style={{ width: audioRef.current ? `${(audioRef.current.currentTime / audioRef.current.duration) * 100 || 0}%` : '0%' }}
-                      ></div>
-                    </div>
-                    <span className="text-xs text-gray-400">{duration}</span>
-                  </div>
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={replaySong} className="p-1 rounded-full hover:bg-gray-800">
-                      🔄
-                    </button>
-                    <button onClick={shuffleSongs} className="p-1 rounded-full hover:bg-gray-800">
-                      🔀
-                    </button>
-                  </div>
-                </div>
-                {playerView === 'fullview' && (
-                  <div className="mt-8">
-                    <h3 className="text-md font-bold mb-2">
-                      {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                        ? `Album: ${nowPlaying[currentSongIndex].album || 'Unknown'}`
-                        : ''}
-                    </h3>
-                    <p className="text-sm text-gray-400">
-                      {currentSongIndex !== null && nowPlaying[currentSongIndex] ? `Released: Unknown` : ''}
-                    </p>
-                    <p className="text-sm text-gray-300 mt-4">
-                      {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                        ? `Details about ${nowPlaying[currentSongIndex].title}...`
-                        : ''}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-
-            <div className="block mt-8 h-full">
-              <h3 className="text-md font-bold mb-2">Your Queue</h3>
-              <div
-                className={`space-y-2 ${playerView === 'fullview' ? 'grid grid-cols-2 gap-2 space-y-0  max-h-full' : 'flex flex-col max-h-64'} overflow-y-scroll no-scrollbar`}
-              >
-                {nowPlaying.map((song, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center p-2 rounded-lg hover:bg-gray-800"
-                    onClick={() => setCurrentSongIndex(index)}
-                  >
-                    <div className="w-8 h-8 rounded-md bg-gradient-to-br from-purple-500 to-pink-600 mr-2"></div>
-                    <div>
-                      <p className="text-sm font-medium">{song.title}</p>
-                      <p className="text-xs text-gray-400">{song.artist || 'Unknown'}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       <audio ref={audioRef} />
       <InputModal
         isOpen={isModalOpen}
