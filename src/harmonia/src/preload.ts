@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadPlaylists: () => ipcRenderer.invoke('load-playlists'),
   savePlaylists: (playlists: Playlist[]) => ipcRenderer.invoke('save-playlists', playlists),
   updatePlaylist: (name: string, songs: Song[]) => ipcRenderer.invoke('update-playlist', name, songs),
+  saveRecentlyPlayed: (recentlyPlayed: Song[]) => ipcRenderer.invoke('save-recently-played', recentlyPlayed),
+  loadRecentlyPlayed: () => ipcRenderer.invoke('load-recently-played'),
 
   // Nouvelles méthodes
   initLibrary: () => ipcRenderer.invoke('init-library'),
