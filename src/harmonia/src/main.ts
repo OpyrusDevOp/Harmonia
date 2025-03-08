@@ -25,7 +25,10 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
     },
+    autoHideMenuBar: true,
   });
+
+  mainWindow.setMenu(null);
 
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -34,8 +37,6 @@ const createWindow = () => {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
 };
 
 app.whenReady().then(() => {
@@ -213,6 +214,14 @@ ipcMain.handle('save-library', (event, lib) => {
 
 ipcMain.handle('load-library', () => {
   return store.get('musicLibrary');
+});
+
+ipcMain.handle('save-recently-played', (event, recentlyPlayed: Song[]) => {
+  store.set('recentlyPlayed', recentlyPlayed);
+});
+
+ipcMain.handle('load-recently-played', () => {
+  return store.get('recentlyPlayed', []);
 });
 
 ipcMain.handle('save-playlists', (event, playlists: Playlist[]) => {
