@@ -1,3 +1,4 @@
+// src/harmonia/src/components/PlayerPanel.tsx
 import React, { useState, useEffect, Dispatch, SetStateAction } from 'react';
 import {
   ChevronLeft,
@@ -13,14 +14,7 @@ import {
   X,
   Layout,
 } from 'lucide-react';
-
-interface Song {
-  id: string;
-  title: string;
-  artist?: string;
-  album?: string;
-  coverPath?: string;
-}
+import { Song } from 'src/types/song';
 
 interface PlayerPanelProps {
   closePlayerView: () => void;
@@ -30,8 +24,6 @@ interface PlayerPanelProps {
   togglePlayPause: () => void;
   prevSong: () => void;
   nextSong: () => void;
-  replaySong: () => void;
-  shuffleSongs: () => void;
   setCurrentSongIndex: (index: number) => void;
   audioRef: React.RefObject<HTMLAudioElement>;
   playerView: 'hidden' | 'sideview' | 'fullview';
@@ -52,8 +44,6 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
   togglePlayPause,
   prevSong,
   nextSong,
-  replaySong,
-  shuffleSongs,
   setCurrentSongIndex,
   audioRef,
   playerView,
@@ -70,26 +60,26 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
   const [isShuffled, setIsShuffled] = useState(false);
   const [originalPlaylist, setOriginalPlaylist] = useState<Song[]>([]);
 
-  // Update originalPlaylist whenever nowPlaying changes (except when shuffling)
   useEffect(() => {
     if (!isShuffled) {
       setOriginalPlaylist([...nowPlaying]);
     }
+    if (nowPlaying.length <= 1 && isShuffled) {
+      setIsShuffled(false);
+    }
   }, [nowPlaying, isShuffled]);
 
-  // Update progress based on audio currentTime
   useEffect(() => {
     const audio = audioRef.current;
     if (audio) {
       const updateProgress = () => {
         if (!isNaN(audio.duration) && audio.duration > 0) {
-          const progressPercent = (audio.currentTime / audio.duration) * 100;
-          setProgress(progressPercent);
+          setProgress((audio.currentTime / audio.duration) * 100);
+        } else {
+          setProgress(0);
         }
       };
-      audio.addEventListener('timeupdate', updateProgress);
 
-      // Handle song end based on repeat mode
       const handleEnded = () => {
         if (repeatMode === 'one') {
           audio.currentTime = 0;
@@ -97,200 +87,181 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
         } else if (repeatMode === 'all' && currentSongIndex !== null && nowPlaying.length > 0) {
           const nextIndex = (currentSongIndex + 1) % nowPlaying.length;
           setCurrentSongIndex(nextIndex);
-        } else if (repeatMode === 'none' && currentSongIndex !== null && currentSongIndex === nowPlaying.length - 1) {
-          setIsPlaying(false);
-          audio.pause();
+        } else if (repeatMode === 'none') {
+          if (currentSongIndex !== null && currentSongIndex < nowPlaying.length - 1) {
+            setCurrentSongIndex(currentSongIndex + 1);
+          } else {
+            setIsPlaying(false);
+          }
         }
       };
+
+      audio.addEventListener('timeupdate', updateProgress);
       audio.addEventListener('ended', handleEnded);
+      updateProgress();
 
       return () => {
         audio.removeEventListener('timeupdate', updateProgress);
         audio.removeEventListener('ended', handleEnded);
       };
     }
-  }, [audioRef, currentSongIndex, nowPlaying, repeatMode, setCurrentSongIndex, setIsPlaying]);
+  }, [audioRef, currentSongIndex, nowPlaying.length, repeatMode, setCurrentSongIndex, setIsPlaying]);
 
-  // Handle click on timeline to seek
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || isNaN(audio.duration) || audio.duration <= 0) return;
+
     const timeline = e.currentTarget;
     const rect = timeline.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const width = rect.width;
-    const newTime = (clickX / width) * (audioRef.current?.duration || 0);
-    if (audioRef.current) {
-      audioRef.current.currentTime = newTime;
-    }
+    const newTime = (clickX / width) * audio.duration;
+    audio.currentTime = Math.max(0, Math.min(newTime, audio.duration));
+    setProgress((audio.currentTime / audio.duration) * 100);
   };
 
-  // Handle dragging for more precise control
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.buttons === 1 && audioRef.current) {
+    const audio = audioRef.current;
+    if (e.buttons === 1 && audio && !isNaN(audio.duration) && audio.duration > 0) {
       const timeline = e.currentTarget;
       const rect = timeline.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
+      const clickX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
       const width = rect.width;
-      const newTime = (clickX / width) * (audioRef.current.duration || 0);
-      audioRef.current.currentTime = Math.max(0, Math.min(newTime, audioRef.current.duration));
+      const newTime = (clickX / width) * audio.duration;
+      audio.currentTime = newTime;
+      setProgress((audio.currentTime / audio.duration) * 100);
     }
   };
 
-  // Cycle repeat mode
   const cycleRepeatMode = () => {
     setRepeatMode((prev) => {
       switch (prev) {
-        case 'none':
-          return 'all';
-        case 'all':
-          return 'one';
-        case 'one':
-          return 'none';
-        default:
-          return 'none';
+        case 'none': return 'all';
+        case 'all': return 'one';
+        case 'one': return 'none';
+        default: return 'none';
       }
     });
   };
 
-  // Toggle shuffle and manage playlist order
   const toggleShuffle = () => {
+    if (nowPlaying.length <= 1) return;
+
     setIsShuffled((prevIsShuffled) => {
+      const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
+
       if (!prevIsShuffled) {
-        // Shuffle the playlist
-        const shuffledPlaylist = [...nowPlaying];
-        for (let i = shuffledPlaylist.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffledPlaylist[i], shuffledPlaylist[j]] = [shuffledPlaylist[j], shuffledPlaylist[i]];
+        const otherSongs = nowPlaying.filter((_, index) => index !== currentSongIndex);
+        const shuffledOthers = [...otherSongs].sort(() => Math.random() - 0.5);
+        let newNowPlaying: Song[];
+        let newIndex: number | null;
+
+        if (currentSong) {
+          newNowPlaying = [currentSong, ...shuffledOthers];
+          newIndex = 0;
+        } else {
+          newNowPlaying = shuffledOthers;
+          newIndex = newNowPlaying.length > 0 ? 0 : null;
         }
 
-        // Ensure the currently playing song remains the same after shuffling
-        if (currentSongIndex !== null && nowPlaying[currentSongIndex]) {
-          const currentSong = nowPlaying[currentSongIndex];
-          const currentIndexInShuffled = shuffledPlaylist.findIndex((song) => song.id === currentSong.id);
-          if (currentIndexInShuffled !== -1) {
-            // Swap the current song to the front of the shuffled playlist
-            [shuffledPlaylist[0], shuffledPlaylist[currentIndexInShuffled]] = [
-              shuffledPlaylist[currentIndexInShuffled],
-              shuffledPlaylist[0],
-            ];
-            setCurrentSongIndex(0);
-          }
-        }
-
-        setNowPlaying(shuffledPlaylist);
+        setNowPlaying(newNowPlaying);
+        setCurrentSongIndex(newIndex);
         return true;
       } else {
-        // Unshuffle the playlist
-        const currentSong = nowPlaying[currentSongIndex];
         setNowPlaying([...originalPlaylist]);
         const newIndex = originalPlaylist.findIndex((song) => song.id === currentSong?.id);
-        setCurrentSongIndex(newIndex !== -1 ? newIndex : 0);
+        setCurrentSongIndex(newIndex !== -1 ? newIndex : (originalPlaylist.length > 0 ? 0 : null));
         return false;
       }
     });
   };
 
+  const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
+
   return (
     <>
       {playerView !== 'hidden' && (
         <div
-          className={`bg-gray-900 transition-all duration-300 ease-in-out ${
+          className={`bg-gray-900 transition-all duration-300 ease-in-out flex ${
             playerView === 'fullview'
-              ? 'fixed inset-0 z-50 w-full translate-x-0 scale-100 opacity-100  p-7 overflow-hidden overscroll-none'
+              ? 'fixed inset-0 z-50 w-full h-full p-4 sm:p-6 flex-col overscroll-none'
               : playerLayout === 'side'
-              ? 'w-80 border-l border-gray-800'
-              : 'fixed bottom-0 left-0 right-0 h-20 border-t border-gray-800 z-40'
+              ? 'w-80 border-l border-gray-800 flex-col'
+              : 'fixed bottom-0 left-0 right-0 h-20 border-t border-gray-800 z-40 items-center'
           }`}
         >
           {playerLayout === 'bottom' && playerView !== 'fullview' && (
-            // Improved Bottom layout with controls accessible on hover
-            <div className="flex items-center h-full px-4">
-              {/* Album Artwork */}
+            <div className="flex items-center h-full px-4 w-full">
               <div
-                className="w-12 h-12 rounded-lg flex-shrink-0 mr-3 shadow-lg"
+                className="w-12 h-12 rounded-lg flex-shrink-0 mr-3 shadow-lg bg-purple-800"
                 style={{
-                  backgroundImage:
-                    currentSongIndex !== null && nowPlaying[currentSongIndex]?.coverPath
-                      ? `url(${nowPlaying[currentSongIndex].coverPath})`
-                      : null,
+                  backgroundImage: currentSong?.coverPath ? `url(${currentSong.coverPath})` : undefined,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
-                  backgroundColor:
-                    currentSongIndex === null || !nowPlaying[currentSongIndex]?.coverPath
-                      ? 'rgb(109, 40, 217)'
-                      : undefined,
                 }}
               ></div>
-
-              {/* Song Info and Controls */}
               <div className="flex-1 min-w-0 mr-4">
                 <div className="flex items-center justify-between">
-                  {/* Song Title and Artist */}
                   <div className="min-w-0 mr-4">
                     <h3 className="text-sm font-bold truncate">
-                      {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                        ? nowPlaying[currentSongIndex].title
-                        : 'No Song'}
+                      {currentSong ? currentSong.title : 'No Song'}
                     </h3>
                     <p className="text-xs text-gray-400 truncate">
-                      {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                        ? nowPlaying[currentSongIndex].artist || 'Unknown'
-                        : ''}
+                      {currentSong ? currentSong.artist || 'Unknown' : ''}
                     </p>
                   </div>
-
-                  {/* Playback Controls */}
                   <div className="flex flex-1 justify-center items-center gap-3">
                     <button
                       onClick={prevSong}
-                      className="p-1 rounded-full hover:bg-gray-800 text-gray-300 hover:text-white"
+                      className="p-1 rounded-full hover:bg-gray-800 text-gray-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={nowPlaying.length <= 1}
                     >
                       <SkipBack size={16} />
                     </button>
                     <button
                       onClick={togglePlayPause}
-                      className="p-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 shadow-md"
+                      className="p-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={nowPlaying.length === 0}
                     >
-                      {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
+                      {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
                     </button>
                     <button
                       onClick={nextSong}
-                      className="p-1 rounded-full hover:bg-gray-800 text-gray-300 hover:text-white"
+                      className="p-1 rounded-full hover:bg-gray-800 text-gray-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={nowPlaying.length <= 1}
                     >
                       <SkipForward size={16} />
                     </button>
                   </div>
                 </div>
-
-                {/* Progress Bar */}
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-gray-400">{currentTime}</span>
+                  <span className="text-xs text-gray-400 w-8 text-center">{currentTime}</span>
                   <div
-                    className="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden relative cursor-pointer"
+                    className="flex-1 h-1 bg-gray-700 rounded-full relative cursor-pointer group"
                     onClick={handleTimelineClick}
                     onMouseMove={handleMouseMove}
                   >
                     <div
                       className="h-full bg-purple-500 rounded-full absolute"
-                      style={{ width: `${progress}%`, transition: isPlaying ? 'none' : 'width 0.3s' }}
+                      style={{ width: `${progress}%` }}
                     >
                       <div
-                        className="w-2 h-2 bg-purple-400 rounded-full absolute -right-1 top-1/2 transform -translate-y-1/2"
-                        style={{ display: isPlaying || progress > 0 ? 'block' : 'none' }}
+                        className={`w-2.5 h-2.5 bg-white rounded-full absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity ${
+                          (isPlaying || progress > 0) ? 'opacity-100' : ''
+                        }`}
                       />
                     </div>
                   </div>
-                  <span className="text-xs text-gray-400">{duration}</span>
+                  <span className="text-xs text-gray-400 w-8 text-center">{duration}</span>
                 </div>
               </div>
-
-              {/* Additional Controls */}
               <div className="flex items-center gap-2 mr-2">
                 <button
                   onClick={cycleRepeatMode}
                   className={`p-1 rounded-full hover:bg-gray-800 ${
                     repeatMode !== 'none' ? 'text-purple-400' : 'text-gray-400 hover:text-white'
                   }`}
-                  title={`Repeat: ${repeatMode === 'none' ? 'Off' : repeatMode === 'all' ? 'All' : 'One'}`}
+                  title={`Repeat: ${repeatMode}`}
                 >
                   {repeatMode === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
                 </button>
@@ -298,14 +269,13 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                   onClick={toggleShuffle}
                   className={`p-1 rounded-full hover:bg-gray-800 ${
                     isShuffled ? 'text-purple-400' : 'text-gray-400 hover:text-white'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                   title={`Shuffle: ${isShuffled ? 'On' : 'Off'}`}
+                  disabled={nowPlaying.length <= 1}
                 >
                   <Shuffle size={16} />
                 </button>
               </div>
-
-              {/* Layout Controls */}
               <div className="flex items-center gap-1 ml-auto">
                 <button
                   onClick={togglePlayerLayout}
@@ -319,19 +289,13 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                 >
                   <Maximize2 size={16} />
                 </button>
-                <button
-                  onClick={closePlayerView}
-                  className="p-1 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white"
-                >
-                  <ChevronLeft size={16} />
-                </button>
               </div>
             </div>
           )}
 
           {(playerLayout === 'side' || playerView === 'fullview') && (
-            <div className={`p-4 ${playerView === 'fullview' ? 'inline h-full mx-auto' : ''}`}>
-              <div className="flex justify-between items-center mb-2">
+            <div className={`flex flex-col h-full overscroll-none ${playerLayout === 'side' ? 'p-4' : 'px-0 sm:px-2'}`}>
+              <div className="flex justify-between items-center mb-2 sm:mb-4 flex-shrink-0 px-4 sm:px-0">
                 <div className="flex items-center gap-2">
                   {playerView !== 'fullview' && (
                     <button onClick={togglePlayerLayout} className="p-1 rounded-full hover:bg-gray-800">
@@ -343,269 +307,166 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                   <button onClick={togglePlayerView} className="p-1 rounded-full hover:bg-gray-800">
                     {playerView === 'fullview' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                   </button>
-                  {playerView === 'fullview' && (
-                    <button onClick={closePlayerView} className="p-1 rounded-full hover:bg-gray-800">
-                      <X size={18} />
-                    </button>
-                  )}
                 </div>
               </div>
 
-              {playerView === 'fullview' ? (
-                // Fullview layout (updated with purple theme)
-                <div className="flex flex-row items-center gap-6">
+              <div
+                className={`flex flex-1 min-h-0 overflow-y-auto justify-center ${
+                  playerView === 'fullview'
+                    ? 'flex-col sm:flex-row gap-2 sm:gap-8 px-2 sm:px-4 py-0 sm:py-2'
+                    : 'flex-col items-center'
+                }`}
+              >
+                <div
+                  className={`${
+                    playerView === 'fullview'
+                      ? 'flex flex-col items-center justify-center flex-1 sm:w-1/2 sm:max-w-lg sm:flex-shrink-0 overscroll-none overflow-hidden'
+                      : 'w-full flex flex-col items-center flex-shrink-0'
+                  }`}
+                >
                   <div
-                    className="w-72 h-72 rounded-2xl mb-4 flex-shrink-0 shadow-lg"
+                    className={`aspect-square rounded-lg shadow-lg mb-2 sm:mb-4 bg-purple-800 ${
+                      playerView === 'fullview' ? 'w-full overscroll-none overflow-hidden max-w-[16rem] sm:max-w-md' : 'w-full max-w-xs'
+                    }`}
                     style={{
-                      backgroundImage:
-                        currentSongIndex !== null && nowPlaying[currentSongIndex]?.coverPath
-                          ? `url(${nowPlaying[currentSongIndex].coverPath})`
-                          : null,
+                      backgroundImage: currentSong?.coverPath ? `url(${currentSong.coverPath})` : undefined,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
-                      backgroundColor:
-                        currentSongIndex === null || !nowPlaying[currentSongIndex]?.coverPath
-                          ? 'rgb(109, 40, 217)'
-                          : undefined,
                     }}
                   ></div>
-                  <div className="flex-1">
-                    <div className="text-left mb-4">
-                      <h3 className="text-xl font-bold">
-                        {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                          ? nowPlaying[currentSongIndex].title
-                          : 'No Song'}
-                      </h3>
-                      <p className="text-sm text-gray-400">
-                        {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                          ? nowPlaying[currentSongIndex].artist || 'Unknown'
-                          : ''}
-                      </p>
+                  <div className={`w-full ${playerView === 'fullview' ? 'text-center sm:text-left' : 'text-center'}`}>
+                    <h3 className="text-base sm:text-xl font-bold truncate">
+                      {currentSong ? currentSong.title : 'No Song'}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-gray-400 truncate mb-2 sm:mb-4">
+                      {currentSong ? currentSong.artist || 'Unknown' : ''}
+                    </p>
+                  </div>
+                  <div className={`flex flex-col items-center gap-2 sm:gap-3 w-full ${playerView === 'fullview' ? 'max-w-[16rem] sm:max-w-sm mx-auto' : ''}`}>
+                    <div className="flex items-center gap-4 sm:gap-5">
+                      <button
+                        onClick={prevSong}
+                        className="p-1 sm:p-2 rounded-full hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={nowPlaying.length <= 1}
+                      >
+                        <SkipBack size={16} className="sm:w-5 sm:h-5" />
+                      </button>
+                      <button
+                        onClick={togglePlayPause}
+                        className="p-2 sm:p-3 rounded-full bg-purple-600 text-white hover:bg-purple-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={nowPlaying.length === 0}
+                      >
+                        {isPlaying ? <Pause size={20} fill="currentColor" className="sm:w-6 sm:h-6" /> : <Play size={20} fill="currentColor" className="ml-0.5 sm:w-6 sm:h-6" />}
+                      </button>
+                      <button
+                        onClick={nextSong}
+                        className="p-1 sm:p-2 rounded-full hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={nowPlaying.length <= 1}
+                      >
+                        <SkipForward size={16} className="sm:w-5 sm:h-5" />
+                      </button>
                     </div>
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="flex items-center gap-4">
-                        <button onClick={prevSong} className="p-2 rounded-full hover:bg-gray-800">
-                          <SkipBack size={20} />
-                        </button>
-                        <button
-                          onClick={togglePlayPause}
-                          className="p-3 rounded-full bg-purple-600 text-white hover:bg-purple-700 shadow-md"
-                        >
-                          {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-0.5" />}
-                        </button>
-                        <button onClick={nextSong} className="p-2 rounded-full hover:bg-gray-800">
-                          <SkipForward size={20} />
-                        </button>
-                      </div>
-                      <div className="w-full flex items-center gap-2">
-                        <span className="text-xs text-gray-400">{currentTime}</span>
+                    <div className="w-full flex items-center gap-2">
+                      <span className="text-[0.65rem] sm:text-xs text-gray-400 w-6 sm:w-8 text-center">{currentTime}</span>
+                      <div
+                        className="flex-1 h-1 bg-gray-700 rounded-full relative cursor-pointer group"
+                        onClick={handleTimelineClick}
+                        onMouseMove={handleMouseMove}
+                      >
                         <div
-                          className="w-full h-1 bg-gray-700 rounded-full overflow-hidden relative cursor-pointer"
-                          onClick={handleTimelineClick}
-                          onMouseMove={handleMouseMove}
+                          className="h-full bg-purple-500 rounded-full absolute"
+                          style={{ width: `${progress}%` }}
                         >
                           <div
-                            className="h-full bg-purple-500 rounded-full absolute"
-                            style={{ width: `${progress}%`, transition: isPlaying ? 'none' : 'width 0.3s' }}
-                          >
-                            <div
-                              className="w-3 h-3 bg-purple-400 rounded-full absolute -right-1.5 top-1/2 transform -translate-y-1/2 shadow-md"
-                              style={{ display: isPlaying || progress > 0 ? 'block' : 'none' }}
-                            />
-                          </div>
+                            className={`w-2 h-2 sm:w-2.5 sm:h-2.5 bg-white rounded-full absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity ${
+                              (isPlaying || progress > 0) ? 'opacity-100' : ''
+                            }`}
+                          />
                         </div>
-                        <span className="text-xs text-gray-400">{duration}</span>
                       </div>
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={cycleRepeatMode}
-                          className={`p-1 rounded-full hover:bg-gray-800 ${
-                            repeatMode !== 'none' ? 'text-purple-400' : ''
-                          }`}
-                          title={`Repeat: ${repeatMode === 'none' ? 'Off' : repeatMode === 'all' ? 'All' : 'One'} ? 'All' : 'One'}`}
-                        >
-                          {repeatMode === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
-                          
-                        </button>
-                        <button
-                          onClick={toggleShuffle}
-                          className={`p-1 rounded-full hover:bg-gray-800 ${isShuffled ? 'text-purple-400' : ''}`}
-                          title={`Shuffle: ${isShuffled ? 'On' : 'Off'}`}
-                        >
-                          <Shuffle size={18} />
-                        </button>
-                      </div>
+                      <span className="text-[0.65rem] sm:text-xs text-gray-400 w-6 sm:w-8 text-center">{duration}</span>
                     </div>
-                    <div className="mt-8">
-                      <h3 className="text-md font-bold mb-2">
-                        {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                          ? `Album: ${nowPlaying[currentSongIndex].album || 'Unknown'}`
-                          : ''}
-                      </h3>
-                      <p className="text-sm text-gray-400">
-                        {currentSongIndex !== null && nowPlaying[currentSongIndex] ? `Released: Unknown` : ''}
-                      </p>
-                      <p className="text-sm text-gray-300 mt-4">
-                        {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                          ? `Details about ${nowPlaying[currentSongIndex].title}...`
-                          : ''}
-                      </p>
+                    <div className="flex gap-3 sm:gap-4 mt-1 sm:mt-2">
+                      <button
+                        onClick={cycleRepeatMode}
+                        className={`p-1 rounded-full hover:bg-gray-800 ${
+                          repeatMode !== 'none' ? 'text-purple-400' : 'text-gray-400 hover:text-white'
+                        }`}
+                        title={`Repeat: ${repeatMode}`}
+                      >
+                        {repeatMode === 'one' ? <Repeat1 size={16} className="sm:w-5 sm:h-5" /> : <Repeat size={16} className="sm:w-5 sm:h-5" />}
+                      </button>
+                      <button
+                        onClick={toggleShuffle}
+                        className={`p-1 rounded-full hover:bg-gray-800 ${
+                          isShuffled ? 'text-purple-400' : 'text-gray-400 hover:text-white'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={`Shuffle: ${isShuffled ? 'On' : 'Off'}`}
+                        disabled={nowPlaying.length <= 1}
+                      >
+                        <Shuffle size={16} className="sm:w-5 sm:h-5" />
+                      </button>
                     </div>
                   </div>
                 </div>
-              ) : playerLayout === 'side' ? (
-                // Side layout (updated with purple theme)
-                <div className="flex flex-col items-center">
-                  <div
-                    className="w-full aspect-square mb-4 flex-shrink-0 rounded-lg shadow-lg"
-                    style={{
-                      backgroundImage:
-                        currentSongIndex !== null && nowPlaying[currentSongIndex]?.coverPath
-                          ? `url(${nowPlaying[currentSongIndex].coverPath})`
-                          : null,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                      backgroundColor:
-                        currentSongIndex === null || !nowPlaying[currentSongIndex]?.coverPath
-                          ? 'rgb(109, 40, 217)'
-                          : undefined,
-                    }}
-                  ></div>
-                  <div className="w-full">
-                    <div className="text-center mb-4">
-                      <h3 className="text-xl font-bold">
-                        {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                          ? nowPlaying[currentSongIndex].title
-                          : 'No Song'}
-                      </h3>
-                      <p className="text-sm text-gray-400">
-                        {currentSongIndex !== null && nowPlaying[currentSongIndex]
-                          ? nowPlaying[currentSongIndex].artist || 'Unknown'
-                          : ''}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="flex items-center gap-4">
-                        <button onClick={prevSong} className="p-2 rounded-full hover:bg-gray-800">
-                          <SkipBack size={20} />
-                        </button>
-                        <button
-                          onClick={togglePlayPause}
-                          className="p-3 rounded-full bg-purple-600 text-white hover:bg-purple-700 shadow-md"
-                        >
-                          {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-0.5" />}
-                        </button>
-                        <button onClick={nextSong} className="p-2 rounded-full hover:bg-gray-800">
-                          <SkipForward size={20} />
-                        </button>
-                      </div>
-                      <div className="w-full flex items-center gap-2">
-                        <span className="text-xs text-gray-400">{currentTime}</span>
-                        <div
-                          className="w-full h-1 bg-gray-700 rounded-full overflow-hidden relative cursor-pointer"
-                          onClick={handleTimelineClick}
-                          onMouseMove={handleMouseMove}
-                        >
-                          <div
-                            className="h-full bg-purple-500 rounded-full absolute"
-                            style={{ width: `${progress}%`, transition: isPlaying ? 'none' : 'width 0.3s' }}
-                          >
-                            <div
-                              className="w-3 h-3 bg-purple-400 rounded-full absolute -right-1.5 top-1/2 transform -translate-y-1/2 shadow-md"
-                              style={{ display: isPlaying || progress > 0 ? 'block' : 'none' }}
-                            />
-                          </div>
-                        </div>
-                        <span className="text-xs text-gray-400">{duration}</span>
-                      </div>
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={cycleRepeatMode}
-                          className={`p-1 rounded-full hover:bg-gray-800 ${
-                            repeatMode !== 'none' ? 'text-purple-400' : ''
-                          }`}
-                          title={`Repeat: ${repeatMode === 'none' ? 'Off' : repeatMode === 'all' ? 'All' : 'One'}`}
-                        >
-                          {repeatMode === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
-                        </button>
-                        <button
-                          onClick={toggleShuffle}
-                          className={`p-1 rounded-full hover:bg-gray-800 ${isShuffled ? 'text-purple-400' : ''}`}
-                          title={`Shuffle: ${isShuffled ? 'On' : 'Off'}`}
-                        >
-                          <Shuffle size={18} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
 
-              {/* Queue Section (hidden in bottom mode) */}
-              {(playerView === 'fullview' || playerLayout === 'side') && (
-                <div className="block mt-8 overflow-auto">
-                  <h3 className="text-md font-bold mb-2">Your Queue</h3>
-                  <div
-                    className={`space-y-2 ${
-                      playerView === 'fullview' ? 'grid grid-cols-2 gap-2 space-y-0' : ''
-                    } overflow-y-scroll no-scrollbar`}
-                    style={{
-                      maxHeight: playerView === 'fullview' ? '300px' : '200px',
-                      overflowX: 'hidden',
-                    }}
-                  >
-                    {nowPlaying.map((song, index) => {
-                      const isNowPlaying =
-                        currentSongIndex !== null &&
-                        nowPlaying.length > 0 &&
-                        currentSongIndex < nowPlaying.length &&
-                        nowPlaying[currentSongIndex]?.id === song.id;
-                      return (
-                        <div
-                          key={index}
-                          className={`flex items-center p-2 rounded-lg hover:bg-gray-800 cursor-pointer ${
-                            isNowPlaying ? 'bg-gray-700 border-l-4 border-l-purple-500' : ''
-                          }`}
-                          onClick={() => {
-                            setCurrentSongIndex(index);
-                          }}
-                        >
+                <div
+                  className={`flex-1 min-h-0 overflow-hidden ${
+                    playerView === 'fullview'
+                      ? 'hidden sm:flex sm:flex-col'
+                      : 'flex flex-col mt-6'
+                  }`}
+                >
+                  <h3 className="text-md font-bold mb-2 flex-shrink-0 px-1">
+                    {playerView === 'fullview' ? 'Up Next' : 'Your Queue'}
+                  </h3>
+                  {nowPlaying.length > 0 ? (
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                      {nowPlaying.map((song, index) => {
+                        const isCurrent = index === currentSongIndex;
+                        return (
                           <div
-                            className="w-8 h-8 rounded-md mr-2"
-                            style={{
-                              backgroundImage: song.coverPath ? `url(${song.coverPath})` : null,
-                              backgroundSize: 'cover',
-                              backgroundPosition: 'center',
-                              backgroundColor: !song.coverPath ? 'rgb(109, 40, 217)' : undefined,
-                            }}
-                          ></div>
-                          <div className="flex-grow">
-                            <p className="text-sm font-medium">{song.title}</p>
-                            <p className="text-xs text-gray-400">{song.artist || 'Unknown'}</p>
-                          </div>
-                          <div className={!isNowPlaying ? `opacity-0 group-hover:opacity-100` : 'relative'}>
-                            {isNowPlaying ? (
-                              <div className="w-4 h-4 mx-auto">
-                                <span className="flex h-3 w-3">
-                                  <span
-                                    className={
-                                      'absolute h-3 w-3 rounded-full bg-purple-400 opacity-75' +
-                                      (isPlaying ? ' animate-ping' : '')
-                                    }
-                                  ></span>
-                                  <span className="relative rounded-full h-3 w-3 bg-purple-500"></span>
+                            key={`${song.id}-${index}`}
+                            className={`group flex items-center p-2 rounded-lg hover:bg-gray-800 cursor-pointer transition-colors ${
+                              isCurrent ? 'bg-gray-700/50 border-l-2 border-l-purple-500' : ''
+                            }`}
+                            onClick={() => setCurrentSongIndex(index)}
+                          >
+                            <div
+                              className="w-8 h-8 rounded-md mr-2 flex-shrink-0 bg-purple-900/50"
+                              style={{
+                                backgroundImage: song.coverPath ? `url(${song.coverPath})` : undefined,
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center',
+                              }}
+                            ></div>
+                            <div className="flex-grow min-w-0">
+                              <p className={`text-sm font-medium truncate ${isCurrent ? 'text-purple-300' : ''}`}>
+                                {song.title}
+                              </p>
+                              <p className="text-xs text-gray-400 truncate">{song.artist || 'Unknown'}</p>
+                            </div>
+                            <div className={`w-5 h-5 flex items-center justify-center ${!isCurrent ? 'opacity-0 group-hover:opacity-100' : ''}`}>
+                              {isCurrent ? (
+                                <span className="flex h-3 w-3 relative">
+                                  <span className={`absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75 ${isPlaying ? 'animate-ping' : ''}`}></span>
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500"></span>
                                 </span>
-                              </div>
-                            ) : (
-                              <Play size={14} className="mx-auto" />
-                            )}
+                              ) : (
+                                <Play size={14} className="text-gray-400" />
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
+                      Queue is empty
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>

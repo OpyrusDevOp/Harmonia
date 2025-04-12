@@ -21,6 +21,9 @@ const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    minHeight: 200,
+    minWidth: 200,
+    title: 'Harmonia',
     icon: 'assets/Harmonia.png',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
