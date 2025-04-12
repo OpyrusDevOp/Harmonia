@@ -27,6 +27,7 @@ const MusicPlayer = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPlaylistForAdding, setSelectedPlaylistForAdding] = useState<string | null>(null); // Renamed for clarity
   const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>([]);
+  const [originalPlaylist, setOriginalPlaylist] = useState<Song[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [previousViewMode, setPreviousViewMode] = useState<ViewMode>('featured'); // To know where to go back to
 
@@ -141,30 +142,12 @@ const MusicPlayer = () => {
     }
   };
 
-  const replaySong = () => playCurrentSong();
-
-  const shuffleSongs = () => {
-    if (nowPlaying.length <= 1) return; // No need to shuffle 0 or 1 song
-    const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
-    const otherSongs = nowPlaying.filter((_, index) => index !== currentSongIndex);
-    const shuffledOthers = [...otherSongs].sort(() => Math.random() - 0.5);
-
-    // Keep the current song playing, shuffle the rest
-    const newNowPlaying = currentSong ? [currentSong, ...shuffledOthers] : shuffledOthers;
-    setNowPlaying(newNowPlaying);
-    // If a song was playing, keep its index at 0 after shuffle
-    setCurrentSongIndex(currentSong ? 0 : (newNowPlaying.length > 0 ? 0 : null));
-    // Don't automatically play, let the user decide or let useEffect handle it if index changed
-  };
-
   const togglePlayerView = () => {
     const views = ['sideview', 'fullview'] as const;
     const currentIndex = views.indexOf(playerView as 'sideview' | 'fullview');
     const nextIndex = (currentIndex + 1) % views.length;
     setPlayerView(views[nextIndex]);
   };
-
-  const closePlayerView = () => setPlayerView('hidden');
 
   const playCurrentSong = () => {
     if (currentSongIndex !== null && nowPlaying[currentSongIndex] && audioRef.current) {
@@ -196,8 +179,9 @@ const MusicPlayer = () => {
   const playPlaylist = (playlist: Playlist, startIndex = 0) => {
     if (playlist.songs.length === 0) return;
     setNowPlaying([...playlist.songs]); // Set the full playlist as now playing
+    setOriginalPlaylist([...playlist.songs]);
     setCurrentSongIndex(startIndex); // Start at the specified index (or 0)
-    // playCurrentSong() will be triggered by the useEffect hook watching currentSongIndex/nowPlaying
+    playCurrentSong(); // will be triggered by the useEffect hook watching currentSongIndex/nowPlaying
   };
 
   // Function to play a single song (usually from library or recently played)
@@ -332,7 +316,6 @@ const MusicPlayer = () => {
       nowPlaying={nowPlaying}
       currentSongIndex={currentSongIndex}
       isPlaying={isPlaying}
-      setNowPlaying={setNowPlaying} // Pass the generic setter
       setCurrentSongIndex={setCurrentSongIndex}
       playPlaylist={playPlaylist} // Pass the function that sets the queue and starts playing
       playlists={playlists}
@@ -433,15 +416,12 @@ const MusicPlayer = () => {
       {/* Player Section (Keep as is) */}
       <PlayerPanel
         audioRef={audioRef}
-        closePlayerView={closePlayerView}
         togglePlayerView={togglePlayerView}
         togglePlayerLayout={togglePlayerLayout}
         playerLayout={playerLayout}
         togglePlayPause={togglePlayPause}
         prevSong={prevSong}
         nextSong={nextSong}
-        replaySong={replaySong}
-        shuffleSongs={shuffleSongs}
         setCurrentSongIndex={setCurrentSongIndex} // Keep for seeking
         playerView={playerView}
         duration={duration}
@@ -451,6 +431,8 @@ const MusicPlayer = () => {
         nowPlaying={nowPlaying}
         setNowPlaying={setNowPlaying} // Keep for queue manipulation in PlayerPanel
         setIsPlaying={setIsPlaying}
+        setOriginalPlaylist={setOriginalPlaylist}
+        originalPlaylist={originalPlaylist}
       />
 
       <audio ref={audioRef} />

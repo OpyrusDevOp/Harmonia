@@ -1,7 +1,6 @@
 // src/harmonia/src/components/PlayerPanel.tsx
 import React, { useState, useEffect, Dispatch, SetStateAction } from 'react';
 import {
-  ChevronLeft,
   Maximize2,
   Minimize2,
   Play,
@@ -17,7 +16,6 @@ import {
 import { Song } from 'src/types/song';
 
 interface PlayerPanelProps {
-  closePlayerView: () => void;
   togglePlayerView: () => void;
   togglePlayerLayout: () => void;
   playerLayout: 'side' | 'bottom';
@@ -34,10 +32,11 @@ interface PlayerPanelProps {
   nowPlaying: Song[];
   setNowPlaying: Dispatch<SetStateAction<Song[]>>;
   setIsPlaying: (isPlaying: boolean) => void;
+  setOriginalPlaylist: Dispatch<SetStateAction<Song[]>>;
+  originalPlaylist: Song[];
 }
 
 const PlayerPanel: React.FC<PlayerPanelProps> = ({
-  closePlayerView,
   togglePlayerView,
   togglePlayerLayout,
   playerLayout,
@@ -54,20 +53,48 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
   nowPlaying,
   setNowPlaying,
   setIsPlaying,
+  setOriginalPlaylist,
+  originalPlaylist,
 }) => {
   const [progress, setProgress] = useState(0);
   const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('none');
   const [isShuffled, setIsShuffled] = useState(false);
-  const [originalPlaylist, setOriginalPlaylist] = useState<Song[]>([]);
+  
+
+  // useEffect(() => {
+  //   if (!isShuffled) {
+  //     setOriginalPlaylist([...nowPlaying]);
+  //   }
+  //   if (nowPlaying.length <= 1 && isShuffled) {
+  //     setIsShuffled(false);
+  //   }
+  // }, [nowPlaying, isShuffled]);
 
   useEffect(() => {
-    if (!isShuffled) {
-      setOriginalPlaylist([...nowPlaying]);
-    }
-    if (nowPlaying.length <= 1 && isShuffled) {
-      setIsShuffled(false);
-    }
-  }, [nowPlaying, isShuffled]);
+      const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
+
+      if(isShuffled)  {
+        const otherSongs = nowPlaying.filter((_, index) => index !== currentSongIndex);
+        const shuffledOthers = [...otherSongs].sort(() => Math.random() - 0.5);
+        let newNowPlaying: Song[];
+        let newIndex: number | null;
+
+        if (currentSong) {
+          newNowPlaying = [currentSong, ...shuffledOthers];
+          newIndex = 0;
+        } else {
+          newNowPlaying = shuffledOthers;
+          newIndex = newNowPlaying.length > 0 ? 0 : null;
+        }
+
+        setNowPlaying(newNowPlaying);
+        setCurrentSongIndex(newIndex);
+      } else {
+        setNowPlaying([...originalPlaylist]);
+        const newIndex = originalPlaylist.findIndex((song) => song.id === currentSong?.id);
+        setCurrentSongIndex(newIndex !== -1 ? newIndex : (originalPlaylist.length > 0 ? 0 : null));
+      }
+  }, [originalPlaylist]);
 
   useEffect(() => {
     const audio = audioRef.current;
