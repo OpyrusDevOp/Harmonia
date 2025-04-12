@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Dispatch, SetStateAction, useMemo } from 'react';
 import { Home, Library, Settings, Music } from 'lucide-react';
 import { Song } from '../types/song';
 import LibraryPanel from '../components/LibraryPanel';
@@ -191,6 +191,34 @@ const MusicPlayer = () => {
     setIsModalOpen(false);
   };
 
+  const memoizedFeaturePanel = useMemo(() => (
+    <FeaturedPanel
+      playlists={playlists}
+      selectedPlaylist={selectedPlaylist}
+      setSelectedPlaylist={setSelectedPlaylist}
+      addToPlaylist={addToPlaylist}
+      openCreatePlaylistModal={openCreatePlaylistModal}
+      setNowPlaying={setNowPlaying}
+      setCurrentSongIndex={setCurrentSongIndex}
+      recentlyPlayed={recentlyPlayed}
+    />
+  ), [playlists, selectedPlaylist, recentlyPlayed]);
+
+  // Memoize the LibraryPanel component
+  const memoizedLibraryPanel = useMemo(() => (
+    <LibraryPanel
+      nowPlaying={nowPlaying}
+      currentSongIndex={currentSongIndex}
+      isPlaying={isPlaying}
+      setNowPlaying={setNowPlaying}
+      setCurrentSongIndex={setCurrentSongIndex}
+      playlists={playlists}
+      selectedPlaylist={selectedPlaylist}
+      setSelectedPlaylist={setSelectedPlaylist}
+      addToPlaylist={addToPlaylist}
+    />
+  ), [nowPlaying, currentSongIndex, isPlaying, playlists, selectedPlaylist]);
+
   return (
     <div className="flex h-screen bg-gray-900 text-white overscroll-none">
       {/* Sidebar */}
@@ -232,30 +260,7 @@ const MusicPlayer = () => {
           </div>
         </div>
         <div className="p-4 flex-1 overflow-hidden">
-          {viewMode === 'featured' ? (
-            <FeaturedPanel
-              playlists={playlists}
-              selectedPlaylist={selectedPlaylist}
-              setSelectedPlaylist={setSelectedPlaylist}
-              addToPlaylist={addToPlaylist}
-              openCreatePlaylistModal={openCreatePlaylistModal}
-              setNowPlaying={setNowPlaying}
-              setCurrentSongIndex={setCurrentSongIndex}
-              recentlyPlayed={recentlyPlayed}
-            />
-          ) : (
-            <LibraryPanel
-              nowPlaying={nowPlaying}
-              currentSongIndex={currentSongIndex}
-              isPlaying={isPlaying}
-              setNowPlaying={setNowPlaying}
-              setCurrentSongIndex={setCurrentSongIndex}
-              playlists={playlists}
-              selectedPlaylist={selectedPlaylist}
-              setSelectedPlaylist={setSelectedPlaylist}
-              addToPlaylist={addToPlaylist}
-            />
-          )}
+        {viewMode === 'featured' ? memoizedFeaturePanel : memoizedLibraryPanel}
         </div>
       </div>
 

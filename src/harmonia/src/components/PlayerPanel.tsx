@@ -8,9 +8,10 @@ import {
   SkipBack,
   SkipForward,
   Repeat,
+  Repeat1,
   Shuffle,
   X,
-  Layout
+  Layout,
 } from 'lucide-react';
 
 interface Song {
@@ -68,6 +69,13 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
   const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('none');
   const [isShuffled, setIsShuffled] = useState(false);
   const [originalPlaylist, setOriginalPlaylist] = useState<Song[]>([]);
+
+  // Update originalPlaylist whenever nowPlaying changes (except when shuffling)
+  useEffect(() => {
+    if (!isShuffled) {
+      setOriginalPlaylist([...nowPlaying]);
+    }
+  }, [nowPlaying, isShuffled]);
 
   // Update progress based on audio currentTime
   useEffect(() => {
@@ -145,41 +153,53 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
 
   // Toggle shuffle and manage playlist order
   const toggleShuffle = () => {
-    if (!isShuffled) {
-      setOriginalPlaylist([...nowPlaying]);
-      const shuffled = [...nowPlaying].sort(() => Math.random() - 0.5);
-      if (currentSongIndex !== null && nowPlaying[currentSongIndex]) {
-        const currentSong = nowPlaying[currentSongIndex];
-        shuffled.sort((a) => (a.id === currentSong.id ? -1 : 0));
-      }
-      setNowPlaying(shuffled);
-      if (currentSongIndex !== null) {
-        const newIndex = shuffled.findIndex((song) => song.id === nowPlaying[currentSongIndex]?.id);
-        setCurrentSongIndex(newIndex !== -1 ? newIndex : 0);
+    setIsShuffled((prevIsShuffled) => {
+      if (!prevIsShuffled) {
+        // Shuffle the playlist
+        const shuffledPlaylist = [...nowPlaying];
+        for (let i = shuffledPlaylist.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffledPlaylist[i], shuffledPlaylist[j]] = [shuffledPlaylist[j], shuffledPlaylist[i]];
+        }
+
+        // Ensure the currently playing song remains the same after shuffling
+        if (currentSongIndex !== null && nowPlaying[currentSongIndex]) {
+          const currentSong = nowPlaying[currentSongIndex];
+          const currentIndexInShuffled = shuffledPlaylist.findIndex((song) => song.id === currentSong.id);
+          if (currentIndexInShuffled !== -1) {
+            // Swap the current song to the front of the shuffled playlist
+            [shuffledPlaylist[0], shuffledPlaylist[currentIndexInShuffled]] = [
+              shuffledPlaylist[currentIndexInShuffled],
+              shuffledPlaylist[0],
+            ];
+            setCurrentSongIndex(0);
+          }
+        }
+
+        setNowPlaying(shuffledPlaylist);
+        return true;
       } else {
-        setCurrentSongIndex(0);
-      }
-      setIsShuffled(true);
-    } else {
-      setNowPlaying([...originalPlaylist]);
-      if (currentSongIndex !== null) {
-        const newIndex = originalPlaylist.findIndex((song) => song.id === nowPlaying[currentSongIndex]?.id);
+        // Unshuffle the playlist
+        const currentSong = nowPlaying[currentSongIndex];
+        setNowPlaying([...originalPlaylist]);
+        const newIndex = originalPlaylist.findIndex((song) => song.id === currentSong?.id);
         setCurrentSongIndex(newIndex !== -1 ? newIndex : 0);
+        return false;
       }
-      setIsShuffled(false);
-    }
+    });
   };
 
   return (
     <>
       {playerView !== 'hidden' && (
         <div
-          className={`bg-gray-900 transition-all duration-300 ease-in-out ${playerView === 'fullview'
-            ? 'fixed inset-0 z-50 w-full translate-x-0 scale-100 opacity-100  p-7 overflow-hidden overscroll-none'
-            : playerLayout === 'side'
+          className={`bg-gray-900 transition-all duration-300 ease-in-out ${
+            playerView === 'fullview'
+              ? 'fixed inset-0 z-50 w-full translate-x-0 scale-100 opacity-100  p-7 overflow-hidden overscroll-none'
+              : playerLayout === 'side'
               ? 'w-80 border-l border-gray-800'
               : 'fixed bottom-0 left-0 right-0 h-20 border-t border-gray-800 z-40'
-            }`}
+          }`}
         >
           {playerLayout === 'bottom' && playerView !== 'fullview' && (
             // Improved Bottom layout with controls accessible on hover
@@ -194,9 +214,10 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                       : null,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
-                  backgroundColor: currentSongIndex === null || !nowPlaying[currentSongIndex]?.coverPath
-                    ? 'rgb(109, 40, 217)'
-                    : undefined,
+                  backgroundColor:
+                    currentSongIndex === null || !nowPlaying[currentSongIndex]?.coverPath
+                      ? 'rgb(109, 40, 217)'
+                      : undefined,
                 }}
               ></div>
 
@@ -219,7 +240,10 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
 
                   {/* Playback Controls */}
                   <div className="flex flex-1 justify-center items-center gap-3">
-                    <button onClick={prevSong} className="p-1 rounded-full hover:bg-gray-800 text-gray-300 hover:text-white">
+                    <button
+                      onClick={prevSong}
+                      className="p-1 rounded-full hover:bg-gray-800 text-gray-300 hover:text-white"
+                    >
                       <SkipBack size={16} />
                     </button>
                     <button
@@ -228,7 +252,10 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                     >
                       {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
                     </button>
-                    <button onClick={nextSong} className="p-1 rounded-full hover:bg-gray-800 text-gray-300 hover:text-white">
+                    <button
+                      onClick={nextSong}
+                      className="p-1 rounded-full hover:bg-gray-800 text-gray-300 hover:text-white"
+                    >
                       <SkipForward size={16} />
                     </button>
                   </div>
@@ -260,14 +287,18 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
               <div className="flex items-center gap-2 mr-2">
                 <button
                   onClick={cycleRepeatMode}
-                  className={`p-1 rounded-full hover:bg-gray-800 ${repeatMode !== 'none' ? 'text-blue-400' : 'text-gray-400 hover:text-white'}`}
+                  className={`p-1 rounded-full hover:bg-gray-800 ${
+                    repeatMode !== 'none' ? 'text-purple-400' : 'text-gray-400 hover:text-white'
+                  }`}
                   title={`Repeat: ${repeatMode === 'none' ? 'Off' : repeatMode === 'all' ? 'All' : 'One'}`}
                 >
-                  <Repeat size={16} />
+                  {repeatMode === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
                 </button>
                 <button
                   onClick={toggleShuffle}
-                  className={`p-1 rounded-full hover:bg-gray-800 ${isShuffled ? 'text-purple-400' : 'text-gray-400 hover:text-white'}`}
+                  className={`p-1 rounded-full hover:bg-gray-800 ${
+                    isShuffled ? 'text-purple-400' : 'text-gray-400 hover:text-white'
+                  }`}
                   title={`Shuffle: ${isShuffled ? 'On' : 'Off'}`}
                 >
                   <Shuffle size={16} />
@@ -276,13 +307,22 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
 
               {/* Layout Controls */}
               <div className="flex items-center gap-1 ml-auto">
-                <button onClick={togglePlayerLayout} className="p-1 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white">
+                <button
+                  onClick={togglePlayerLayout}
+                  className="p-1 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white"
+                >
                   <Layout size={16} />
                 </button>
-                <button onClick={togglePlayerView} className="p-1 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white">
+                <button
+                  onClick={togglePlayerView}
+                  className="p-1 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white"
+                >
                   <Maximize2 size={16} />
                 </button>
-                <button onClick={closePlayerView} className="p-1 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white">
+                <button
+                  onClick={closePlayerView}
+                  className="p-1 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white"
+                >
                   <ChevronLeft size={16} />
                 </button>
               </div>
@@ -293,7 +333,6 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
             <div className={`p-4 ${playerView === 'fullview' ? 'inline h-full mx-auto' : ''}`}>
               <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center gap-2">
-
                   {playerView !== 'fullview' && (
                     <button onClick={togglePlayerLayout} className="p-1 rounded-full hover:bg-gray-800">
                       <Layout size={18} />
@@ -324,9 +363,10 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                           : null,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
-                      backgroundColor: currentSongIndex === null || !nowPlaying[currentSongIndex]?.coverPath
-                        ? 'rgb(109, 40, 217)'
-                        : undefined,
+                      backgroundColor:
+                        currentSongIndex === null || !nowPlaying[currentSongIndex]?.coverPath
+                          ? 'rgb(109, 40, 217)'
+                          : undefined,
                     }}
                   ></div>
                   <div className="flex-1">
@@ -379,10 +419,13 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                       <div className="flex gap-2 mt-2">
                         <button
                           onClick={cycleRepeatMode}
-                          className={`p-1 rounded-full hover:bg-gray-800 ${repeatMode !== 'none' ? 'text-blue-400' : ''}`}
-                          title={`Repeat: ${repeatMode === 'none' ? 'Off' : repeatMode === 'all' ? 'All' : 'One'}`}
+                          className={`p-1 rounded-full hover:bg-gray-800 ${
+                            repeatMode !== 'none' ? 'text-purple-400' : ''
+                          }`}
+                          title={`Repeat: ${repeatMode === 'none' ? 'Off' : repeatMode === 'all' ? 'All' : 'One'} ? 'All' : 'One'}`}
                         >
-                          <Repeat size={18} />
+                          {repeatMode === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
+                          
                         </button>
                         <button
                           onClick={toggleShuffle}
@@ -422,9 +465,10 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                           : null,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
-                      backgroundColor: currentSongIndex === null || !nowPlaying[currentSongIndex]?.coverPath
-                        ? 'rgb(109, 40, 217)'
-                        : undefined,
+                      backgroundColor:
+                        currentSongIndex === null || !nowPlaying[currentSongIndex]?.coverPath
+                          ? 'rgb(109, 40, 217)'
+                          : undefined,
                     }}
                   ></div>
                   <div className="w-full">
@@ -477,10 +521,12 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                       <div className="flex gap-2 mt-2">
                         <button
                           onClick={cycleRepeatMode}
-                          className={`p-1 rounded-full hover:bg-gray-800 ${repeatMode !== 'none' ? 'text-blue-400' : ''}`}
+                          className={`p-1 rounded-full hover:bg-gray-800 ${
+                            repeatMode !== 'none' ? 'text-purple-400' : ''
+                          }`}
                           title={`Repeat: ${repeatMode === 'none' ? 'Off' : repeatMode === 'all' ? 'All' : 'One'}`}
                         >
-                          <Repeat size={18} />
+                          {repeatMode === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
                         </button>
                         <button
                           onClick={toggleShuffle}
@@ -500,7 +546,9 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                 <div className="block mt-8 overflow-auto">
                   <h3 className="text-md font-bold mb-2">Your Queue</h3>
                   <div
-                    className={`space-y-2 ${playerView === 'fullview' ? 'grid grid-cols-2 gap-2 space-y-0' : ''} overflow-y-scroll no-scrollbar`}
+                    className={`space-y-2 ${
+                      playerView === 'fullview' ? 'grid grid-cols-2 gap-2 space-y-0' : ''
+                    } overflow-y-scroll no-scrollbar`}
                     style={{
                       maxHeight: playerView === 'fullview' ? '300px' : '200px',
                       overflowX: 'hidden',
@@ -515,8 +563,9 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                       return (
                         <div
                           key={index}
-                          className={`flex items-center p-2 rounded-lg hover:bg-gray-800 cursor-pointer ${isNowPlaying ? 'bg-gray-700 border-l-4 border-l-purple-500' : ''
-                            }`}
+                          className={`flex items-center p-2 rounded-lg hover:bg-gray-800 cursor-pointer ${
+                            isNowPlaying ? 'bg-gray-700 border-l-4 border-l-purple-500' : ''
+                          }`}
                           onClick={() => {
                             setCurrentSongIndex(index);
                           }}

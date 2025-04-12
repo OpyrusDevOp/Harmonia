@@ -28,6 +28,8 @@ const FeaturedPanel: React.FC<FeaturedPanelProps> = ({
   recentlyPlayed,
 }) => {
   const playPlaylist = (playlist: Playlist) => {
+    if(playlist.songs.length === 0) return;
+    
     setNowPlaying(playlist.songs);
     setCurrentSongIndex(0);
   };
