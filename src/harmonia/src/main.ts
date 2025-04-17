@@ -8,7 +8,7 @@ import Store from 'electron-store';
 import crypto from 'crypto';
 import path from 'path';
 import Playlist from './types/playlist';
-import { pathToFileURL, fileURLToPath } from 'url';
+import { pathToFileURL } from 'url';
 import mime from 'mime-types';
 
 const store = new Store();
@@ -20,7 +20,7 @@ var mainWindow: BrowserWindow;
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    
+
     width: 800,
     height: 600,
     minHeight: 350,
@@ -30,15 +30,12 @@ const createWindow = () => {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
-      devTools: true,
-      
     },
     fullscreenable: true,
     thickFrame: true
   });
   mainWindow.setMenu(null);
   mainWindow.webContents
-mainWindow.webContents.openDevTools();
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -123,7 +120,7 @@ async function scanFolder(folderPath: string): Promise<Song[]> {
       }
     }
   }
-console.log(musicFiles)
+  console.log(musicFiles)
   return musicFiles;
 }
 
@@ -266,7 +263,7 @@ ipcMain.handle('update-playlist', (event, playlistName: string, songs: Song[]) =
 // Dans createWindow ou au démarrage de l'application
 ipcMain.handle('init-library', async () => {
   const lastFolder = store.get('lastFolder') as string;
-console.log("Last folder : ", lastFolder)
+  console.log("Last folder : ", lastFolder)
   if (!lastFolder || lastFolder === '')
     return {
       library: [],
@@ -294,13 +291,22 @@ console.log("Last folder : ", lastFolder)
 
 ipcMain.handle('getImageDataUrl', async (event, filePath: string) => {
   try {
-    //console.log('Reading image file: ', filePath)
-    const buffer = await fs.readFile(filePath.replace('file:///', ''));
+    const platform = process.platform;
+    console.log('Reading image file: ', filePath)
+    let correctPath: string;
+    if (platform === 'win32') {
+      correctPath = filePath.replace('file:///', '');
+    } else if (platform === 'darwin') {
+      console.log('Running on macOS');
+    } else if (platform === 'linux') {
+      correctPath = filePath.replace('file://', '');
+    }
+    const buffer = await fs.readFile(correctPath);
     const mimeType = mime.lookup(filePath) || 'image/jpeg';
     const base64 = buffer.toString('base64');
     const url = `data:${mimeType};base64,${base64}`;
     //console.log('Image URL:', url);
-    return  url;
+    return url;
   } catch (err) {
     console.error('Error reading image file:', err);
     return '';
