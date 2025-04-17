@@ -7,6 +7,7 @@ import PlayerPanel from '../components/PlayerPanel';
 import InputModal from '../components/InputModal';
 import PlaylistView from '../components/Playlist'; // Import the new component
 import Playlist from 'src/types/playlist';
+import { useFetcher } from 'react-router-dom';
 
 // Define the possible view modes
 type ViewMode = 'featured' | 'library' | 'playlist';
@@ -16,6 +17,8 @@ const MusicPlayer = () => {
   // Update viewMode type
   const [viewMode, setViewMode] = useState<ViewMode>('featured');
   // Add state for the currently viewed playlist
+  const [musicLibrary, setMusicLibrary] = useState<Song[]>([]);
+  const [isFolderWatched, setIsFolderWatched] = useState(false);
   const [viewingPlaylist, setViewingPlaylist] = useState<Playlist | null>(null);
   const [playerLayout, setPlayerLayout] = useState<'side' | 'bottom'>('bottom');
   const [nowPlaying, setNowPlaying] = useState<Song[]>([]);
@@ -38,9 +41,41 @@ const MusicPlayer = () => {
       setPlaylists(cachedPlaylists);
       const cachedRecentlyPlayed: Song[] = (await window.electronAPI?.loadRecentlyPlayed()) || [];
       setRecentlyPlayed(cachedRecentlyPlayed.slice(0, 5));
+
+      const result = await window.electronAPI?.initLibrary();
+console.log(result)
+      if (result) {
+        const library = result.library || [];
+        setMusicLibrary(library);
+       
+        setIsFolderWatched(!!result.folder);
+      }
+
+      // const removeListener = window.electronAPI.onLibraryUpdated((updatedLibrary: Song[]) => {
+      //   console.log(updatedLibrary)
+      //   setMusicLibrary(updatedLibrary);
+      // });
+
+      // return () => {
+      //   // Check if removeListener is a function before calling
+      //   if (typeof removeListener === 'function') {
+      //     removeListener();
+      //   } else {
+      //     // Fallback or alternative cleanup if needed, e.g., using the specific preload method
+      //     window.electronAPI.removeLibraryUpdatedListener?.();
+      //   }
+      // };
     }
     loadData();
   }, []);
+
+  const scanFolder = async () => {
+      let library: Song[] = await window.electronAPI?.selectFolder();
+if(!library) return;
+      setMusicLibrary(library);
+      setIsFolderWatched(true);
+      window.electronAPI?.saveLibrary(library);
+    };
 
   useEffect(() => {
     if (playlists.length > 0 || JSON.stringify(playlists) === '[]') { // Save even if empty after deletion
@@ -184,13 +219,6 @@ const MusicPlayer = () => {
     playCurrentSong(); // will be triggered by the useEffect hook watching currentSongIndex/nowPlaying
   };
 
-  // Function to play a single song (usually from library or recently played)
-  // It sets the nowPlaying queue to just this song.
-  const playSingleSong = (song: Song) => {
-    setNowPlaying([song]);
-    setCurrentSongIndex(0);
-  };
-
   // --- Playlist Management ---
   const createPlaylist = (name: string) => {
     if (name && !playlists.some((p) => p.name === name)) {
@@ -311,11 +339,13 @@ const MusicPlayer = () => {
     />
   ), [playlists, selectedPlaylistForAdding, recentlyPlayed, viewMode]); // Add viewMode dependency if needed
 
-  const memoizedLibraryPanel = useMemo(() => (
+  const memoizedLibraryPanel = (
     <LibraryPanel
       nowPlaying={nowPlaying}
       currentSongIndex={currentSongIndex}
+      musicLibrary={musicLibrary}
       isPlaying={isPlaying}
+      scanFolder={scanFolder}
       setCurrentSongIndex={setCurrentSongIndex}
       playPlaylist={playPlaylist} // Pass the function that sets the queue and starts playing
       playlists={playlists}
@@ -323,7 +353,7 @@ const MusicPlayer = () => {
       setSelectedPlaylist={setSelectedPlaylistForAdding}
       addToPlaylist={addToPlaylist}
     />
-  ), [nowPlaying, currentSongIndex, isPlaying, playlists, selectedPlaylistForAdding]);
+  );
 
   // --- Determine Title ---
   const currentTitle = useMemo(() => {

@@ -8,7 +8,7 @@ import Store from 'electron-store';
 import crypto from 'crypto';
 import path from 'path';
 import Playlist from './types/playlist';
-
+import { pathToFileURL, fileURLToPath } from 'url';
 
 const store = new Store();
 if (started) {
@@ -28,12 +28,13 @@ const createWindow = () => {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
+      devTools: true
     },
-    autoHideMenuBar: true,
+    fullscreenable: true,
+    thickFrame: true
   });
-
   mainWindow.setMenu(null);
-
+mainWindow.webContents.openDevTools();
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -90,11 +91,12 @@ async function scanFolder(folderPath: string): Promise<Song[]> {
         const metadata = await mm.parseFile(fullPath, { duration: true });
         const cover = metadata.common.picture ? mm.selectCover(metadata.common.picture) : null;
 
-        // Stocker la pochette séparément
-        let coverPath = null;
+        // Store the cover separately
+        let coverUrl = null;
         if (cover) {
-          coverPath = path.join(coverCacheDir, `${fileId}.jpg`);
+          const coverPath = path.join(coverCacheDir, `${fileId}.jpg`);
           await fs.writeFile(coverPath, cover.data);
+          coverUrl = pathToFileURL(coverPath).toString(); // Use pathToFileURL
         }
 
         musicFiles.push({
@@ -102,7 +104,7 @@ async function scanFolder(folderPath: string): Promise<Song[]> {
           title: metadata.common.title || file.name.replace(/\.(mp3|wav|flac)$/i, ''),
           artist: metadata.common.artist || 'Unknown',
           album: metadata.common.album || 'Unknown',
-          coverPath: coverPath ? `file://${coverPath}` : null,
+          coverPath: coverUrl,
           path: `file://${fullPath}`,
           time: metadata.format.duration ? formatDuration(metadata.format.duration) : 'Unknown',
           lastModified: (await fs.stat(fullPath)).mtimeMs
@@ -113,7 +115,7 @@ async function scanFolder(folderPath: string): Promise<Song[]> {
       }
     }
   }
-
+console.log(musicFiles)
   return musicFiles;
 }
 
@@ -191,6 +193,7 @@ async function processSingleFile(filePath: string): Promise<Song[]> {
       artist: metadata.common.artist || 'Unknown',
       album: metadata.common.album || 'Unknown',
       coverPath: coverPath ? `file://${coverPath}` : null,
+      genre: metadata.common.genre?.[0] || 'Unknown',
       path: `file://${filePath}`,
       time: metadata.format.duration ? formatDuration(metadata.format.duration) : 'Unknown',
       lastModified: (await fs.stat(filePath)).mtimeMs
@@ -255,6 +258,7 @@ ipcMain.handle('update-playlist', (event, playlistName: string, songs: Song[]) =
 // Dans createWindow ou au démarrage de l'application
 ipcMain.handle('init-library', async () => {
   const lastFolder = store.get('lastFolder') as string;
+console.log("Last folder : ", lastFolder)
   if (!lastFolder || lastFolder === '')
     return {
       library: [],

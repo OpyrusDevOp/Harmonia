@@ -10,6 +10,7 @@ interface Playlist {
 
 interface LibraryPanelProps {
   nowPlaying: Song[];
+  musicLibrary: Song[];
   currentSongIndex: number | null;
   isPlaying: boolean;
   // setNowPlaying: (songs: Song[]) => void; // Keep generic setter if needed elsewhere - Removed as planned
@@ -19,6 +20,7 @@ interface LibraryPanelProps {
   selectedPlaylist: string | null;
   setSelectedPlaylist: (name: string | null) => void;
   addToPlaylist: (playlistName: string, selectedSongs: Song[]) => void;
+  scanFolder: () => Promise<void>;
 }
 
 const LONG_PRESS_DURATION = 500; // milliseconds
@@ -27,61 +29,26 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
   nowPlaying,
   currentSongIndex,
   isPlaying,
-  setCurrentSongIndex,
+  musicLibrary,
   playPlaylist, // Use this prop
   playlists,
   selectedPlaylist,
   setSelectedPlaylist,
   addToPlaylist,
+  scanFolder 
 }) => {
-  const [musicLibrary, setMusicLibrary] = useState<Song[]>([]);
-  const [filteredLibrary, setFilteredLibrary] = useState<Song[]>([]);
+  
+  const [filteredLibrary, setFilteredLibrary] = useState<Song[]>(musicLibrary);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedSongs, setSelectedSongs] = useState<Song[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Song | string; direction: 'ascending' | 'descending' } | null>(null);
-  const [isFolderWatched, setIsFolderWatched] = useState(false);
+ 
 
   // --- Ref for long press detection ---
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const didLongPressRef = useRef<boolean>(false); // To prevent click after long press
 
-  // --- Load/Filter/Sort Effects (remain the same) ---
-  useEffect(() => {
-    async function loadData() {
-      const result = await window.electronAPI.initLibrary();
-      if (result) {
-        const library = result.library || [];
-        setMusicLibrary(library);
-        setFilteredLibrary(library);
-        setIsFolderWatched(!!result.folder);
-      }
-
-      const removeListener = window.electronAPI.onLibraryUpdated((updatedLibrary: Song[]) => {
-        setMusicLibrary(updatedLibrary);
-        let processedLibrary = updatedLibrary;
-        if (searchQuery) {
-          processedLibrary = applySearchFilter(processedLibrary, searchQuery);
-        }
-        if (sortConfig) {
-          processedLibrary = applySort(processedLibrary, sortConfig);
-        }
-        setFilteredLibrary(processedLibrary);
-      });
-
-      return () => {
-        // Check if removeListener is a function before calling
-        if (typeof removeListener === 'function') {
-          removeListener();
-        } else {
-          // Fallback or alternative cleanup if needed, e.g., using the specific preload method
-          window.electronAPI.removeLibraryUpdatedListener?.();
-        }
-      };
-    }
-
-    loadData();
-  }, []); // Run only on mount
 
   const applySearchFilter = (library: Song[], query: string): Song[] => {
     const q = query.toLowerCase().trim();
@@ -129,12 +96,16 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
       processedLibrary = applySort(processedLibrary, sortConfig);
     }
     setFilteredLibrary(processedLibrary);
+   // console.log(filteredLibrary)
   }, [searchQuery, sortConfig, musicLibrary]);
 
   // --- Component Functions (remain mostly the same) ---
-  const scanFolder = async () => {
-    await window.electronAPI.selectFolder();
-  };
+  // const scanFolder = async () => {
+  //   let library: Song[] = await window.electronAPI?.selectFolder();
+  //   setMusicLibrary(library);
+  //   setIsFolderWatched(true);
+  //   window.electronAPI?.saveLibrary(library);
+  // };
 
   const addToNowPlayingFromSelection = () => {
     if (selectedSongs.length > 0) {
