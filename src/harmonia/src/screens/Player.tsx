@@ -50,23 +50,33 @@ console.log(result)
        
         setIsFolderWatched(!!result.folder);
       }
-
-      // const removeListener = window.electronAPI.onLibraryUpdated((updatedLibrary: Song[]) => {
-      //   console.log(updatedLibrary)
-      //   setMusicLibrary(updatedLibrary);
-      // });
-
-      // return () => {
-      //   // Check if removeListener is a function before calling
-      //   if (typeof removeListener === 'function') {
-      //     removeListener();
-      //   } else {
-      //     // Fallback or alternative cleanup if needed, e.g., using the specific preload method
-      //     window.electronAPI.removeLibraryUpdatedListener?.();
-      //   }
-      // };
     }
     loadData();
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('play', () => {
+        // Check if already playing to avoid unnecessary state changes/audio calls
+        if (!isPlaying && audioRef.current) {
+          togglePlayPause();
+        }
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        // Check if already paused
+        if (isPlaying && audioRef.current) {
+          togglePlayPause();
+        }
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        prevSong();
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        nextSong();
+      });
+      // Optional: Add handlers for seekforward, seekbackward, stop if needed
+      // navigator.mediaSession.setActionHandler('seekbackward', (details) => { /* ... */ });
+      // navigator.mediaSession.setActionHandler('seekforward', (details) => { /* ... */ });
+      // navigator.mediaSession.setActionHandler('stop', () => { /* ... stop playback completely */ });
+    }
   }, []);
 
   const scanFolder = async () => {
@@ -132,8 +142,66 @@ if(!library) return;
       setCurrentSongIndex(null);
       setCurrentTime('0:00');
       setDuration('0:00');
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = 'none';
+      }
     }
   }, [currentSongIndex, nowPlaying]);
+
+  useEffect(() => {
+    const setupMediaSession = async () => {
+      if ('mediaSession' in navigator && currentSongIndex !== null && nowPlaying[currentSongIndex]) {
+        const currentSong = nowPlaying[currentSongIndex];
+        let artworkUrl = '';
+  
+        if (currentSong.coverPath) {
+          try {
+            // Fetch data URL from main process
+            artworkUrl = await window.electronAPI?.getImageDataUrl(currentSong.coverPath);
+            //console.log('Artwork URL:', artworkUrl);
+          } catch (e) {
+            console.error('Error fetching image data URL:', e);
+          }
+        }
+  
+        try {
+          navigator.mediaSession.metadata = new MediaMetadata({
+
+            title: currentSong.title || 'Unknown Title',
+            artist: currentSong.artist || 'Unknown Artist',
+            album: currentSong.album || '',
+            artwork: artworkUrl ? [{ src: artworkUrl, sizes: '512x512', type: 'image/jpeg' }] : [],
+
+          });
+          navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+        } catch (err) {
+          console.error('Failed to set MediaSession metadata:', err);
+        }
+  
+        // Set action handlers
+        navigator.mediaSession.setActionHandler('play', togglePlayPause);
+        navigator.mediaSession.setActionHandler('pause', togglePlayPause);
+        navigator.mediaSession.setActionHandler('previoustrack', prevSong);
+        navigator.mediaSession.setActionHandler('nexttrack', nextSong);
+      } else {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = 'none';
+      }
+    };
+  
+    setupMediaSession();
+  
+    return () => {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('play', null);
+        navigator.mediaSession.setActionHandler('pause', null);
+        navigator.mediaSession.setActionHandler('previoustrack', null);
+        navigator.mediaSession.setActionHandler('nexttrack', null);
+      }
+    };
+  }, [currentSongIndex, nowPlaying, isPlaying]);
+
 
 
   // --- Playback Functions (Keep mostly as is, adjust playPlaylist) ---
@@ -151,9 +219,9 @@ if(!library) return;
         audioRef.current.pause();
       } else if (currentSongIndex !== null && nowPlaying[currentSongIndex]) {
         // Ensure src is set if paused or stopped
-        if (audioRef.current.src !== nowPlaying[currentSongIndex].path) {
-           audioRef.current.src = nowPlaying[currentSongIndex].path;
-        }
+        // if (audioRef.current.src !== nowPlaying[currentSongIndex].path) {
+        //    audioRef.current.src = nowPlaying[currentSongIndex].path;
+        // }
         audioRef.current.play().catch((err) => console.error('Playback failed:', err));
       } else if (nowPlaying.length > 0 && currentSongIndex === null) {
         // If stopped but there are songs, play the first one

@@ -178,26 +178,16 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
       const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
 
       if (!prevIsShuffled) {
-        const otherSongs = nowPlaying.filter((_, index) => index !== currentSongIndex);
-        const shuffledOthers = [...otherSongs].sort(() => Math.random() - 0.5);
-        let newNowPlaying: Song[];
-        let newIndex: number | null;
-
-        if (currentSong) {
-          newNowPlaying = [currentSong, ...shuffledOthers];
-          newIndex = 0;
-        } else {
-          newNowPlaying = shuffledOthers;
-          newIndex = newNowPlaying.length > 0 ? 0 : null;
-        }
+        const newNowPlaying = [...nowPlaying].sort(() => Math.random() - 0.5);
+         let  newIndex = 0;
 
         setNowPlaying(newNowPlaying);
         setCurrentSongIndex(newIndex);
         return true;
       } else {
         setNowPlaying([...originalPlaylist]);
-        const newIndex = originalPlaylist.findIndex((song) => song.id === currentSong?.id);
-        setCurrentSongIndex(newIndex !== -1 ? newIndex : (originalPlaylist.length > 0 ? 0 : null));
+        // const newIndex = originalPlaylist.findIndex((song) => song.id === currentSong?.id);
+        setCurrentSongIndex(0);
         return false;
       }
     });
@@ -221,6 +211,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
             <div className="flex items-center h-full px-4 w-full">
               <div
                 className="w-12 h-12 rounded-lg flex-shrink-0 mr-3 shadow-lg bg-purple-800"
+                onClick={togglePlayerView}
                 style={{
                   backgroundImage: currentSong?.coverPath ? `url(${currentSong.coverPath})` : undefined,
                   backgroundSize: 'cover',
