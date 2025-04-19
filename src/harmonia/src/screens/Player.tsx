@@ -19,6 +19,7 @@ const MusicPlayer = () => {
   // Add state for the currently viewed playlist
   const [musicLibrary, setMusicLibrary] = useState<Song[]>([]);
   const [isFolderWatched, setIsFolderWatched] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('none');
   const [viewingPlaylist, setViewingPlaylist] = useState<Playlist | null>(null);
   const [playerLayout, setPlayerLayout] = useState<'side' | 'bottom'>('bottom');
   const [nowPlaying, setNowPlaying] = useState<Song[]>([]);
@@ -37,10 +38,11 @@ const MusicPlayer = () => {
   // --- Load/Save Effects (Keep as is) ---
   useEffect(() => {
     async function loadData() {
-      const cachedPlaylists: Playlist[] = (await window.electronAPI?.loadPlaylists()) || [];
+      const cachedPlaylists: Playlist[] = (await window.electronAPI.loadPlaylists()) || [];
       setPlaylists(cachedPlaylists);
-      const cachedRecentlyPlayed: Song[] = (await window.electronAPI?.loadRecentlyPlayed()) || [];
-      setRecentlyPlayed(cachedRecentlyPlayed.slice(0, 5));
+      const cachedRecentlyPlayed: Song[] = (await window.electronAPI.loadRecentlyPlayed()) || [];
+      console.log(cachedRecentlyPlayed);
+      setRecentlyPlayed(cachedRecentlyPlayed);
 
       const result = await window.electronAPI?.initLibrary();
 console.log(result)
@@ -88,15 +90,17 @@ if(!library) return;
     };
 
   useEffect(() => {
-    if (playlists.length > 0 || JSON.stringify(playlists) === '[]') { // Save even if empty after deletion
-        window.electronAPI?.savePlaylists(playlists);
-    }
+    window.electronAPI?.savePlaylists(playlists);
   }, [playlists]);
 
   useEffect(() => {
-    if (recentlyPlayed.length > 0 || JSON.stringify(recentlyPlayed) === '[]') { // Save even if empty
-        window.electronAPI?.saveRecentlyPlayed(recentlyPlayed);
+    const saveRecentlyPlayed = async () => {
+      await window.electronAPI?.saveRecentlyPlayed(recentlyPlayed);
+      const cachedRecentlyPlayed: Song[] = (await window.electronAPI.loadRecentlyPlayed()) || [];
+      console.log("Saved Recently Played:", cachedRecentlyPlayed)
     }
+
+    saveRecentlyPlayed();
   }, [recentlyPlayed]);
 
   useEffect(() => {
@@ -129,7 +133,7 @@ if(!library) return;
         audio.removeEventListener('ended', handleSongEnd); // Remove listener
       };
     }
-  }, [isPlaying, currentSongIndex, nowPlaying]); // Add dependencies
+  }, [isPlaying, currentSongIndex, nowPlaying, repeatMode]); // Add dependencies
 
   useEffect(() => {
     if (currentSongIndex !== null && nowPlaying.length > 0) {
@@ -232,9 +236,25 @@ if(!library) return;
   };
 
   const nextSong = () => {
-    if (nowPlaying.length > 0) {
-        const nextIndex = currentSongIndex !== null ? (currentSongIndex + 1) % nowPlaying.length : 0;
-        setCurrentSongIndex(nextIndex);
+    const audio = audioRef.current;
+    console.log('Repeat mode:', repeatMode);
+    switch (repeatMode) {
+      case 'one':
+        audio.currentTime = 0;
+        audio.play().catch((err) => console.error('Replay failed:', err));
+        break;
+      case 'all': 
+        if (currentSongIndex !== null && nowPlaying.length > 0) {
+          const nextIndex = (currentSongIndex + 1) % nowPlaying.length;
+          setCurrentSongIndex(nextIndex);
+        } 
+        break;
+      default:
+        if (currentSongIndex !== null && currentSongIndex < nowPlaying.length - 1) {
+          setCurrentSongIndex(currentSongIndex + 1);
+        } else {
+          setIsPlaying(false);
+        }
     }
   };
 
@@ -523,6 +543,8 @@ if(!library) return;
         setCurrentSongIndex={setCurrentSongIndex} // Keep for seeking
         playerView={playerView}
         duration={duration}
+        repeatMode={repeatMode}
+        setRepeatMode={setRepeatMode}
         currentTime={currentTime}
         isPlaying={isPlaying}
         currentSongIndex={currentSongIndex}

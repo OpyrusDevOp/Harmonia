@@ -30,12 +30,13 @@ const createWindow = () => {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
+      devTools: true
     },
     fullscreenable: true,
     thickFrame: true
   });
   mainWindow.setMenu(null);
-  mainWindow.webContents
+  mainWindow.webContents.openDevTools()
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);

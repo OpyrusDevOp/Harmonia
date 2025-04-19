@@ -25,6 +25,7 @@ interface PlayerPanelProps {
   setCurrentSongIndex: (index: number) => void;
   audioRef: React.RefObject<HTMLAudioElement>;
   playerView: 'hidden' | 'sideview' | 'fullview';
+  repeatMode: 'none' | 'all' | 'one';
   duration: string;
   currentTime: string;
   isPlaying: boolean;
@@ -33,6 +34,7 @@ interface PlayerPanelProps {
   setNowPlaying: Dispatch<SetStateAction<Song[]>>;
   setIsPlaying: (isPlaying: boolean) => void;
   setOriginalPlaylist: Dispatch<SetStateAction<Song[]>>;
+  setRepeatMode: Dispatch<SetStateAction<'none' | 'all' | 'one'>>;
   originalPlaylist: Song[];
 }
 
@@ -54,10 +56,11 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
   setNowPlaying,
   setIsPlaying,
   setOriginalPlaylist,
+  repeatMode,
+  setRepeatMode,
   originalPlaylist,
 }) => {
   const [progress, setProgress] = useState(0);
-  const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('none');
   const [isShuffled, setIsShuffled] = useState(false);
   
 
@@ -108,19 +111,19 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
       };
 
       const handleEnded = () => {
-        if (repeatMode === 'one') {
-          audio.currentTime = 0;
-          audio.play().catch((err) => console.error('Replay failed:', err));
-        } else if (repeatMode === 'all' && currentSongIndex !== null && nowPlaying.length > 0) {
-          const nextIndex = (currentSongIndex + 1) % nowPlaying.length;
-          setCurrentSongIndex(nextIndex);
-        } else if (repeatMode === 'none') {
-          if (currentSongIndex !== null && currentSongIndex < nowPlaying.length - 1) {
-            setCurrentSongIndex(currentSongIndex + 1);
-          } else {
-            setIsPlaying(false);
-          }
-        }
+        // if (repeatMode === 'one') {
+        //   audio.currentTime = 0;
+        //   audio.play().catch((err) => console.error('Replay failed:', err));
+        // } else if (repeatMode === 'all' && currentSongIndex !== null && nowPlaying.length > 0) {
+        //   const nextIndex = (currentSongIndex + 1) % nowPlaying.length;
+        //   setCurrentSongIndex(nextIndex);
+        // } else if (repeatMode === 'none') {
+        //   if (currentSongIndex !== null && currentSongIndex < nowPlaying.length - 1) {
+        //     setCurrentSongIndex(currentSongIndex + 1);
+        //   } else {
+        //     setIsPlaying(false);
+        //   }
+        // }
       };
 
       audio.addEventListener('timeupdate', updateProgress);
@@ -166,7 +169,6 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
         case 'none': return 'all';
         case 'all': return 'one';
         case 'one': return 'none';
-        default: return 'none';
       }
     });
   };
