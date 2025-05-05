@@ -101,6 +101,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
 
   useEffect(() => {
     const audio = audioRef.current;
+    console.log(currentSong)
     if (audio) {
       const updateProgress = () => {
         if (!isNaN(audio.duration) && audio.duration > 0) {

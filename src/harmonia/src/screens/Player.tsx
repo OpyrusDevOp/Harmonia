@@ -9,6 +9,7 @@ import PlaylistView from '../components/Playlist'; // Import the new component
 import Playlist from 'src/types/playlist';
 import { useFetcher } from 'react-router-dom';
 
+
 // Define the possible view modes
 type ViewMode = 'featured' | 'library' | 'playlist';
 
@@ -49,8 +50,8 @@ console.log(result)
       if (result) {
         const library = result.library || [];
         setMusicLibrary(library);
-       
-        setIsFolderWatched(!!result.folder);
+        window.electronAPI?.startWatcher(result.folder,loadLibrary);
+        // setIsFolderWatched(!!);
       }
     }
     loadData();
@@ -82,12 +83,16 @@ console.log(result)
   }, []);
 
   const scanFolder = async () => {
-      let library: Song[] = await window.electronAPI?.selectFolder();
-if(!library) return;
+      let result = await window.electronAPI.selectFolder();
+      const library = result.library || [];
       setMusicLibrary(library);
-      setIsFolderWatched(true);
-      window.electronAPI?.saveLibrary(library);
+      window.electronAPI?.startWatcher(result.folder);
     };
+
+    const loadLibrary = async () => {
+      let result = await window.electronAPI.loadLibrary();
+      setMusicLibrary(result);
+    }
 
   useEffect(() => {
     window.electronAPI?.savePlaylists(playlists);
@@ -163,7 +168,7 @@ if(!library) return;
           try {
             // Fetch data URL from main process
             artworkUrl = await window.electronAPI?.getImageDataUrl(currentSong.coverPath);
-            //console.log('Artwork URL:', artworkUrl);
+            // console.log('Artwork URL:', artworkUrl);
           } catch (e) {
             console.error('Error fetching image data URL:', e);
           }
@@ -276,6 +281,7 @@ if(!library) return;
     if (currentSongIndex !== null && nowPlaying[currentSongIndex] && audioRef.current) {
       const songToPlay = nowPlaying[currentSongIndex];
       // Only change src if it's different or empty
+      console.log(songToPlay.path)
       if (audioRef.current.src !== songToPlay.path) {
           audioRef.current.src = songToPlay.path;
       }

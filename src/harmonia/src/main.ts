@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, contextBridge } from 'electron';
 import chokidar, { FSWatcher } from 'chokidar';
 import started from 'electron-squirrel-startup';
 import * as fs from 'fs-extra';
@@ -16,13 +16,11 @@ if (started) {
   app.quit();
 }
 var mainWindow: BrowserWindow;
+// var audioPlayer = new HTMLAudioElement();
 
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-
-    width: 800,
-    height: 600,
     minHeight: 350,
     minWidth: 350,
     title: 'Harmonia',
@@ -36,7 +34,7 @@ const createWindow = () => {
     thickFrame: true
   });
   mainWindow.setMenu(null);
-  mainWindow.webContents.openDevTools()
+  // mainWindow.webContents.openDevTools()
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -134,10 +132,10 @@ function formatDuration(seconds: number): string {
 
 let watcher: FSWatcher | null = null;
 
-function startFolderWatch(folderPath: string, mainWindow: BrowserWindow) {
+async function startFolderWatch(folderPath: string, mainWindow: BrowserWindow) {
   // Arrêter toute surveillance précédente
   if (watcher) {
-    watcher.close();
+    await watcher.close();
   }
 
   // Configurer le watcher
@@ -150,12 +148,14 @@ function startFolderWatch(folderPath: string, mainWindow: BrowserWindow) {
   // Événements de fichier
   watcher
     .on('add', async (path) => {
+      console.log('File added:', path)
       if (path.match(/\.(mp3|wav|flac)$/i)) {
         const updatedSongs = await processSingleFile(path);
         mainWindow.webContents.send('library-updated', updatedSongs);
       }
     })
     .on('unlink', (path) => {
+      console.log('File removed:', path)
       if (path.match(/\.(mp3|wav|flac)$/i)) {
         // Supprimer de la bibliothèque
         const fileId = generateFileId(path);
@@ -166,11 +166,14 @@ function startFolderWatch(folderPath: string, mainWindow: BrowserWindow) {
       }
     })
     .on('change', async (path) => {
+      console.log('File changed:', path)
       if (path.match(/\.(mp3|wav|flac)$/i)) {
         const updatedSongs = await processSingleFile(path);
         mainWindow.webContents.send('library-updated', updatedSongs);
       }
     });
+
+    console.log('Watching folder:', folderPath)
 }
 
 // Fonction pour traiter un seul fichier ajouté ou modifié
@@ -221,15 +224,20 @@ async function processSingleFile(filePath: string): Promise<Song[]> {
 }
 
 
-ipcMain.handle('save-library', (event, lib) => {
+ipcMain.handle('save-library', (_, lib) => {
   store.set('musicLibrary', lib);
 });
+var onLibraryUpdated: () => void | null;
+ipcMain.handle('library-updated', (_, songs: Song[]) => {
+  store.set('musicLibrary', songs);
+  if(onLibraryUpdated) onLibraryUpdated();
+})
 
 ipcMain.handle('load-library', () => {
   return store.get('musicLibrary');
 });
 
-ipcMain.handle('save-recently-played', (event, recentlyPlayed: Song[]) => {
+ipcMain.handle('save-recently-played', (_, recentlyPlayed: Song[]) => {
   store.set('recentlyPlayed', recentlyPlayed);
 });
 
@@ -237,7 +245,7 @@ ipcMain.handle('load-recently-played', () => {
   return store.get('recentlyPlayed', []);
 });
 
-ipcMain.handle('save-playlists', (event, playlists: Playlist[]) => {
+ipcMain.handle('save-playlists', (_, playlists: Playlist[]) => {
   if (!Array.isArray(playlists)) {
     console.warn('Invalid playlists data, setting to empty array');
   } else {
@@ -249,7 +257,7 @@ ipcMain.handle('load-playlists', () => {
   return store.get('playlists');
 });
 
-ipcMain.handle('update-playlist', (event, playlistName: string, songs: Song[]) => {
+ipcMain.handle('update-playlist', (_, playlistName: string, songs: Song[]) => {
   if (!playlistName || !Array.isArray(songs)) {
     console.warn('Invalid playlist name or songs data');
     return store.get('playlists', []);
@@ -260,6 +268,11 @@ ipcMain.handle('update-playlist', (event, playlistName: string, songs: Song[]) =
   store.set('playlists', updatedPlaylists);
   return updatedPlaylists;
 });
+
+ipcMain.handle('start-watcher', (_, folderPath: string, callback?: () => any) => {
+  startFolderWatch(folderPath, mainWindow);
+  if(callback) onLibraryUpdated = callback;
+})
 
 // Dans createWindow ou au démarrage de l'application
 ipcMain.handle('init-library', async () => {
@@ -272,9 +285,9 @@ ipcMain.handle('init-library', async () => {
     };
   const library = store.get('musicLibrary', []) as Song[];
 
+  // Démarrer la surveillance
+  // startFolderWatch(lastFolder, mainWindow);
   if (lastFolder && library.length > 0) {
-    // Démarrer la surveillance
-    startFolderWatch(lastFolder, mainWindow);
 
     // Vérifier si des fichiers ont été modifiés pendant que l'app était fermée
     const updatedLibrary = await checkForModifiedFiles(lastFolder, library);
@@ -290,7 +303,7 @@ ipcMain.handle('init-library', async () => {
   };
 });
 
-ipcMain.handle('getImageDataUrl', async (event, filePath: string) => {
+ipcMain.handle('getImageDataUrl', async (_, filePath: string) => {
   try {
     const platform = process.platform;
     console.log('Reading image file: ', filePath)
@@ -345,4 +358,26 @@ async function checkForModifiedFiles(folderPath: string, library: Song[]): Promi
   }
 
   return updatedLibrary;
+}
+
+interface ElectronAPI {
+  selectFolder: () => Promise<{ library: Song[], folder: string | null }>;
+  loadLibrary: () => Promise<Song[]>;
+  saveLibrary: (lib: Song[]) => Promise<void>;
+  loadPlaylists: () => Promise<Playlist[]>;
+  savePlaylists: (playlists: Playlist[]) => Promise<void>;
+  updatePlaylist: (name: string, songs: Song[]) => Promise<Playlist[]>;
+  initLibrary: () => Promise<{ library: Song[], folder: string | null }>;
+  onLibraryUpdated: (callback: (updatedLibrary: Song[]) => void) => void;
+  removeLibraryUpdatedListener: () => void;
+  startWatcher: (folderPath: string, callback?: () => any) => Promise<void>;
+  getImageDataUrl: (filePath: string) => Promise<string>;
+  saveRecentlyPlayed: (recentlyPlayed: Song[]) => Promise<void>;
+  loadRecentlyPlayed: () => Promise<Song[]>;
+}
+
+declare global {
+  interface Window {
+    electronAPI: ElectronAPI;
+  }
 }
