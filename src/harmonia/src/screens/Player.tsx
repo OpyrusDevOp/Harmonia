@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Home, Library, Settings, Music, ArrowLeft } from 'lucide-react'; // Import ArrowLeft
+import { Home, Library, Settings, Music, ArrowLeft, MinimizeIcon } from 'lucide-react'; // Import ArrowLeft
 import { Song } from '../types/song';
 import LibraryPanel from '../components/LibraryPanel';
 import FeaturedPanel from '../components/FeaturePanel';
@@ -19,8 +19,8 @@ const MusicPlayer = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('featured');
   // Add state for the currently viewed playlist
   const [musicLibrary, setMusicLibrary] = useState<Song[]>([]);
-  const [isFolderWatched, setIsFolderWatched] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('none');
+  // const [isFolderWatched, setIsFolderWatched] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('all');
   const [viewingPlaylist, setViewingPlaylist] = useState<Playlist | null>(null);
   const [playerLayout, setPlayerLayout] = useState<'side' | 'bottom'>('bottom');
   const [nowPlaying, setNowPlaying] = useState<Song[]>([]);
@@ -35,7 +35,76 @@ const MusicPlayer = () => {
   const [originalPlaylist, setOriginalPlaylist] = useState<Song[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [previousViewMode, setPreviousViewMode] = useState<ViewMode>('featured'); // To know where to go back to
+  const [isShuffled, setIsShuffled] = useState(false);
+  const [volume, setVolume] = useState(0.5); // 0 to 1
+  const [muted, setMuted] = useState(false);
 
+  useEffect(() => {
+    const removeListener = window.electronAPI?.onTrayControl((action) => {
+      switch (action) {
+        case 'play':
+          if (audioRef.current && nowPlaying.length > 0) {
+            audioRef.current.play();
+            setIsPlaying(true);
+          }
+          break;
+        case 'pause':
+          if (audioRef.current) {
+            audioRef.current.pause();
+            setIsPlaying(false);
+          }
+          break;
+        case 'next':
+          nextSong();
+          break;
+        case 'previous':
+          prevSong();
+          break;
+        case 'volume-up':
+          setVolume(prev => Math.min(prev + 0.1, 1));
+          setMuted(false);
+          break;
+        case 'volume-down':
+          setVolume(prev => Math.max(prev - 0.1, 0));
+          break;
+        case 'mute-toggle':
+          setMuted(prev => !prev);
+          break;
+      }
+    });
+    
+    return () => {
+      if (removeListener) removeListener();
+    };
+  }, [nextSong, prevSong, nowPlaying]);
+
+  // Apply volume and mute changes to audio element
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+      audioRef.current.muted = muted;
+    }
+  }, [volume, muted]);
+  
+  // Update tray whenever playback state changes
+  useEffect(() => {
+    // Only update if we have setup initialized
+    if (typeof window.electronAPI?.updateTray === 'function') {
+      window.electronAPI.updateTray({
+        isPlaying,
+        currentSong: currentSongIndex !== null && nowPlaying.length > 0 
+          ? nowPlaying[currentSongIndex] 
+          : null
+      });
+    }
+    
+  }, [isPlaying, currentSongIndex, nowPlaying]);
+
+  const minimizeToTray = () => {
+    if (typeof window.electronAPI?.minimizeToTray === 'function') {
+      window.electronAPI.minimizeToTray();
+    }
+  };
   // --- Load/Save Effects (Keep as is) ---
   useEffect(() => {
     async function loadData() {
@@ -46,7 +115,6 @@ const MusicPlayer = () => {
       setRecentlyPlayed(cachedRecentlyPlayed);
 
       const result = await window.electronAPI?.initLibrary();
-console.log(result)
       if (result) {
         const library = result.library || [];
         setMusicLibrary(library);
@@ -158,57 +226,52 @@ console.log(result)
     }
   }, [currentSongIndex, nowPlaying]);
 
-  useEffect(() => {
-    const setupMediaSession = async () => {
-      if ('mediaSession' in navigator && currentSongIndex !== null && nowPlaying[currentSongIndex]) {
-        const currentSong = nowPlaying[currentSongIndex];
-        let artworkUrl = '';
-  
-        if (currentSong.coverPath) {
-          try {
-            // Fetch data URL from main process
-            artworkUrl = await window.electronAPI?.getImageDataUrl(currentSong.coverPath);
-            // console.log('Artwork URL:', artworkUrl);
-          } catch (e) {
-            console.error('Error fetching image data URL:', e);
-          }
-        }
-  
+  const setupMediaSession = async () => {
+    if ('mediaSession' in navigator && currentSongIndex != null && nowPlaying[currentSongIndex]) {
+      console.log('setup media session')
+      const currentSong = nowPlaying[currentSongIndex];
+      let artworkUrl = '';
+
+      if (currentSong.coverPath) {
         try {
-          navigator.mediaSession.metadata = new MediaMetadata({
-
-            title: currentSong.title || 'Unknown Title',
-            artist: currentSong.artist || 'Unknown Artist',
-            album: currentSong.album || '',
-            artwork: artworkUrl ? [{ src: artworkUrl, sizes: '512x512', type: 'image/jpeg' }] : [],
-
-          });
-          navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-        } catch (err) {
-          console.error('Failed to set MediaSession metadata:', err);
+          // Fetch data URL from main process
+          artworkUrl = await window.electronAPI?.getImageDataUrl(currentSong.coverPath);
+          // console.log('Artwork URL:', artworkUrl);
+        } catch (e) {
+          console.error('Error fetching image data URL:', e);
         }
-  
-        // Set action handlers
-        navigator.mediaSession.setActionHandler('play', togglePlayPause);
-        navigator.mediaSession.setActionHandler('pause', togglePlayPause);
-        navigator.mediaSession.setActionHandler('previoustrack', prevSong);
-        navigator.mediaSession.setActionHandler('nexttrack', nextSong);
-      } else {
-        navigator.mediaSession.metadata = null;
-        navigator.mediaSession.playbackState = 'none';
       }
-    };
-  
+
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+
+          title: currentSong.title || 'Unknown Title',
+          artist: currentSong.artist || 'Unknown Artist',
+          album: currentSong.album || '',
+          artwork: artworkUrl ? [{ src: artworkUrl, sizes: '512x512', type: 'image/jpeg' }] : [],
+
+        });
+        navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+        console.log("Media session updated");
+        
+      } catch (err) {
+        console.error('Failed to set MediaSession metadata:', err);
+      }
+
+      // Set action handlers
+      navigator.mediaSession.setActionHandler('play', togglePlayPause);
+      navigator.mediaSession.setActionHandler('pause', togglePlayPause);
+      navigator.mediaSession.setActionHandler('previoustrack', prevSong);
+      navigator.mediaSession.setActionHandler('nexttrack', nextSong);
+    } else {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
+    }
+  };
+
+  useEffect(() => {
     setupMediaSession();
-  
-    return () => {
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.setActionHandler('play', null);
-        navigator.mediaSession.setActionHandler('pause', null);
-        navigator.mediaSession.setActionHandler('previoustrack', null);
-        navigator.mediaSession.setActionHandler('nexttrack', null);
-      }
-    };
+
   }, [currentSongIndex, nowPlaying, isPlaying]);
 
 
@@ -240,7 +303,7 @@ console.log(result)
     }
   };
 
-  const nextSong = () => {
+  var nextSong = () => {
     const audio = audioRef.current;
     console.log('Repeat mode:', repeatMode);
     switch (repeatMode) {
@@ -263,7 +326,7 @@ console.log(result)
     }
   };
 
-  const prevSong = () => {
+  var prevSong = () => {
     if (nowPlaying.length > 0) {
         const prevIndex = currentSongIndex !== null ? (currentSongIndex - 1 + nowPlaying.length) % nowPlaying.length : nowPlaying.length - 1;
         setCurrentSongIndex(prevIndex);
@@ -525,12 +588,17 @@ console.log(result)
           {viewMode === 'library' && memoizedLibraryPanel}
           {viewMode === 'playlist' && viewingPlaylist && (
             <PlaylistView
+            isShuffled={isShuffled}
+            setIsShuffled={setIsShuffled}
+            setOriginalPlaylist={setOriginalPlaylist}
+            nowPlaying={nowPlaying}
+            currentSongIndex={currentSongIndex}
+setCurrentSongIndex={setCurrentSongIndex}
+setNowPlaying={setNowPlaying}
               playlist={viewingPlaylist}
               onPlayPlaylist={playPlaylist} // Pass the function to play the whole list
               onPlaySong={(playlist, index) => playPlaylist(playlist, index)} // Play song within playlist context
               onDeleteSong={deleteSongFromPlaylist} // Pass delete function
-              nowPlaying={nowPlaying}
-              currentSongIndex={currentSongIndex}
               isPlaying={isPlaying}
             />
           )}
@@ -545,12 +613,15 @@ console.log(result)
         playerLayout={playerLayout}
         togglePlayPause={togglePlayPause}
         prevSong={prevSong}
+        minimizeToTray={minimizeToTray}
         nextSong={nextSong}
         setCurrentSongIndex={setCurrentSongIndex} // Keep for seeking
         playerView={playerView}
         duration={duration}
         repeatMode={repeatMode}
         setRepeatMode={setRepeatMode}
+        setIsShuffled={setIsShuffled}
+        isShuffled={isShuffled}
         currentTime={currentTime}
         isPlaying={isPlaying}
         currentSongIndex={currentSongIndex}
@@ -568,6 +639,7 @@ console.log(result)
         onSubmit={handleModalSubmit}
         title="Create New Playlist"
       />
+        
     </div>
   );
 };

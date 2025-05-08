@@ -19,5 +19,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLibraryUpdated: (songs: Song[]) => ipcRenderer.invoke('library-updated', songs),
   removeLibraryUpdatedListener: () => {
     ipcRenderer.removeAllListeners('library-updated');
+  },
+  showContextMenu: (data: any) => ipcRenderer.send('show-context-menu', data),
+  onContextMenuCommand: (callback: (data: any) => void) => {
+    ipcRenderer.on('context-menu-command', (_, data) => callback(data));
+    return () => {
+      ipcRenderer.removeAllListeners('context-menu-command');
+    };
+  },
+  minimizeToTray: () => ipcRenderer.send('minimize-to-tray'),
+  updateTray: (playbackState: { isPlaying: boolean, currentSong: Song | null }) => 
+    ipcRenderer.send('update-tray', playbackState),
+  onTrayControl: (callback: (action: string) => void) => {
+    const handler = (_: any, action: any) => callback(action);
+    ipcRenderer.on('tray-control', handler);
+    return () => {
+      ipcRenderer.removeListener('tray-control', handler);
+    };
   }
 });

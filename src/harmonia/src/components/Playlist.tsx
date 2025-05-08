@@ -1,6 +1,6 @@
 // src/harmonia/src/components/PlaylistView.tsx
-import React from 'react';
-import { Play, Trash2, Music } from 'lucide-react';
+import React, { Dispatch, SetStateAction } from 'react';
+import { Play, Trash2, Music, Shuffle } from 'lucide-react';
 import { Song } from 'src/types/song';
 import Playlist from 'src/types/playlist';
 
@@ -12,6 +12,11 @@ interface PlaylistViewProps {
   nowPlaying: Song[];
   currentSongIndex: number | null;
   isPlaying: boolean;
+  isShuffled: boolean; 
+  setNowPlaying: Dispatch<SetStateAction<Song[]>>;
+  setIsShuffled: Dispatch<SetStateAction<boolean>>;
+  setCurrentSongIndex: (index: number) => void;
+  setOriginalPlaylist: Dispatch<SetStateAction<Song[]>>;
 }
 
 const PlaylistView: React.FC<PlaylistViewProps> = ({
@@ -20,6 +25,10 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
   onPlaySong,
   onDeleteSong,
   nowPlaying,
+  setOriginalPlaylist, 
+  setNowPlaying,
+  setCurrentSongIndex,
+  setIsShuffled,
   currentSongIndex,
   isPlaying,
 }) => {
@@ -36,11 +45,20 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
     return isCurrentQueueThisPlaylist && nowPlaying[currentSongIndex]?.id === song.id;
   };
 
+  const PlayShuffle = () => {
+    setOriginalPlaylist(playlist.songs);
+    const newNowPlaying = [...playlist.songs].sort(() => Math.random() - 0.5);
+    setNowPlaying(newNowPlaying);
+    setCurrentSongIndex(0);
+
+    setIsShuffled(true);
+  };
+
 
   return (
     <div className="flex flex-col h-full">
       {/* Optional: Add a Play All button */}
-      <div className="mb-4">
+      <div className="mb-4 flex flex-row gap-5">
         <button
           className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => onPlayPlaylist(playlist)}
@@ -48,6 +66,15 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
         >
           <Play size={16} />
           <span>Play All</span>
+        </button>
+
+        <button
+          className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={PlayShuffle}
+          disabled={playlist.songs.length === 0}
+        >
+          <Shuffle size={16} />
+          <span>Play Shuffle</span>
         </button>
       </div>
 

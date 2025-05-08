@@ -1,4 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, contextBridge } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Tray, Menu,globalShortcut,
+  powerMonitor,
+  Notification, 
+  MenuItemConstructorOptions, nativeImage, MenuItem } from 'electron';
 import chokidar, { FSWatcher } from 'chokidar';
 import started from 'electron-squirrel-startup';
 import * as fs from 'fs-extra';
@@ -16,7 +19,122 @@ if (started) {
   app.quit();
 }
 var mainWindow: BrowserWindow;
-// var audioPlayer = new HTMLAudioElement();
+let tray: Tray | null = null;
+let forceQuit = false;
+let isQuitting = false;
+let currentPlaybackState = {
+  isPlaying: false,
+  currentSong: null as Song | null
+};
+// Register media key handlers
+function registerMediaKeys(mainWindow: BrowserWindow) {
+  // Register media key shortcuts
+  const registerKeys = () => {
+    try {
+      // Play/Pause key
+      globalShortcut.register('MediaPlayPause', () => {
+        mainWindow.webContents.send('tray-control', 
+          currentPlaybackState.isPlaying ? 'pause' : 'play');
+      });
+      
+      // Next track key
+      globalShortcut.register('MediaNextTrack', () => {
+        mainWindow.webContents.send('tray-control', 'next');
+      });
+      
+      // Previous track key
+      globalShortcut.register('MediaPreviousTrack', () => {
+        mainWindow.webContents.send('tray-control', 'previous');
+      });
+      
+      // Stop key
+      globalShortcut.register('MediaStop', () => {
+        mainWindow.webContents.send('tray-control', 'pause');
+      });
+    } catch (error) {
+      console.error('Failed to register media keys:', error);
+    }
+  };
+ // Register keys initially
+ registerKeys();
+  
+ // Re-register keys when computer wakes from sleep
+ powerMonitor.on('resume', () => {
+   // Unregister first to prevent duplicates
+   globalShortcut.unregisterAll();
+   // Wait a bit for the system to fully wake up
+   setTimeout(registerKeys, 1000);
+ });
+}
+
+  // Create a notification for song changes
+function showSongNotification(song: Song) {
+  if (!song || !song.title) return;
+  
+  let notificationOptions = {
+    title: 'Now Playing',
+    body: `${song.title} - ${song.artist || 'Unknown Artist'}`,
+    silent: true // Don't play notification sound for song changes
+  };
+  
+  // If the song has a cover image, try to use it in the notification
+  // if (song.coverPath) {
+  //   try {
+  //     const iconPath = song.coverPath.replace('file://', '');
+  //     notificationOptions['icon'] = iconPath;
+  //   } catch (error) {
+  //     console.error('Failed to load cover for notification:', error);
+  //   }
+  // }
+  
+  const notification = new Notification(notificationOptions);
+  notification.show();
+  
+  // When the notification is clicked, show the app
+  notification.on('click', () => {
+    if (mainWindow) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+function createTray(mainWindow: BrowserWindow) {
+   // Create tray icon - use your app icon or create a smaller version for the tray
+   const iconPath = path.join(__dirname, '../assets/Harmonia.png'); // Using main app icon
+   const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+   
+   tray = new Tray(trayIcon);
+   tray.setToolTip('Harmonia Music Player');
+   
+   // Set up tray menu
+   updateTrayMenu(mainWindow, false, null);
+   
+   // Handle tray clicks (different behavior based on platform)
+   if (process.platform === 'darwin') {
+     // On macOS, make click toggle play/pause
+     tray.on('click', () => {
+       mainWindow.webContents.send('tray-control', 
+         currentPlaybackState.isPlaying ? 'pause' : 'play');
+     });
+     
+     // Double click shows the app
+     tray.on('double-click', () => {
+       mainWindow.show();
+       mainWindow.focus();
+     });
+   } else {
+     // On Windows/Linux, click shows the app
+     tray.on('click', () => {
+       if (!mainWindow.isVisible()) {
+         mainWindow.show();
+         mainWindow.focus();
+       } else {
+         mainWindow.focus();
+       }
+     });
+   }
+}
 
 const createWindow = () => {
   // Create the browser window.
@@ -33,8 +151,54 @@ const createWindow = () => {
     fullscreenable: true,
     thickFrame: true
   });
+  
+  // Create the tray icon
+  createTray(mainWindow);
+  
+  // Register media key handlers
+  registerMediaKeys(mainWindow);
+  
+  // Handle the window close event to minimize to tray instead
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      
+      // Show notification that app is still running (first time only)
+      if (process.platform === 'darwin') {
+        const firstClose = store.get('firstClose', true);
+        if (firstClose) {
+          new Notification({
+            title: 'Harmonia is still running',
+            body: 'The app will continue to play in the background. Click the tray icon to show it again.',
+          }).show();
+          store.set('firstClose', false);
+        }
+      }
+      return false;
+    }
+    return true;
+  });
+  
+  // Prevent the app from exiting when all windows are closed
+  // app.on('window-all-closed', () => {
+  //   if (process.platform !== 'darwin' && !isQuitting) {
+  //     e.preventDefault();
+  //   }
+  // });
+  
+  // Reset the force quit flag when the app is activated
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else {
+      mainWindow.show();
+    }
+  });
+
+
   mainWindow.setMenu(null);
-  // mainWindow.webContents.openDevTools()
+   mainWindow.webContents.openDevTools()
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -43,6 +207,106 @@ const createWindow = () => {
   }
 
 };
+
+// Function to update the tray menu based on playback state
+function updateTrayMenu(mainWindow: BrowserWindow, isPlaying: boolean, currentSong: Song | null) {
+  if (!tray) return;
+  
+  // Save current state for media key handlers
+  currentPlaybackState = { isPlaying, currentSong };
+  
+  // Create template with platform-specific enhancements
+  const template: (MenuItemConstructorOptions | MenuItem)[] = [
+    {
+      label: currentSong 
+        ? `Now Playing: ${currentSong.title || 'Unknown'} - ${currentSong.artist || 'Unknown'}` 
+        : 'Harmonia Music Player',
+      enabled: false
+    },
+    { type: 'separator' },
+    {
+      label: isPlaying ? 'Pause' : 'Play',
+      accelerator: 'Space', // Show keyboard shortcut hint
+      click: () => {
+        mainWindow.webContents.send('tray-control', isPlaying ? 'pause' : 'play');
+      }
+    },
+    {
+      label: 'Next',
+      accelerator: 'Right',
+      click: () => {
+        mainWindow.webContents.send('tray-control', 'next');
+      }
+    },
+    {
+      label: 'Previous',
+      accelerator: 'Left',
+      click: () => {
+        mainWindow.webContents.send('tray-control', 'previous');
+      }
+    }
+  ];
+  
+  // Add volume controls
+  template.push(
+    { type: 'separator' },
+    {
+      label: 'Volume',
+      submenu: [
+        {
+          label: 'Increase',
+          click: () => {
+            mainWindow.webContents.send('tray-control', 'volume-up');
+          }
+        },
+        {
+          label: 'Decrease',
+          click: () => {
+            mainWindow.webContents.send('tray-control', 'volume-down');
+          }
+        },
+        {
+          label: 'Mute/Unmute',
+          click: () => {
+            mainWindow.webContents.send('tray-control', 'mute-toggle');
+          }
+        }
+      ]
+    }
+  );
+  
+  // Add window controls
+  template.push(
+    { type: 'separator' },
+    {
+      label: 'Show App',
+      click: () => {
+        if (!mainWindow.isVisible()) mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  );
+  
+  // Add quit control
+  template.push({
+    label: 'Quit',
+    accelerator: 'CommandOrControl+Q',
+    click: () => {
+      isQuitting = true;
+      app.quit();
+    }
+  });
+  
+  const contextMenu = Menu.buildFromTemplate(template);
+  tray.setContextMenu(contextMenu);
+  
+  // Update the tray tooltip with song info
+  if (currentSong) {
+    tray.setToolTip(`Harmonia - ${currentSong.title || 'Unknown'} - ${currentSong.artist || 'Unknown'}`);
+  } else {
+    tray.setToolTip('Harmonia Music Player');
+  }
+}
 
 app.whenReady().then(() => {
   createWindow();
@@ -59,6 +323,30 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// Now let's add some IPC handlers for tray communication
+ipcMain.on('update-tray', (_, playbackState: { isPlaying: boolean, currentSong: Song | null }) => {
+  if (mainWindow && tray) {
+    // Store previous state to detect song changes
+    const prevSong = currentPlaybackState.currentSong;
+    const newSong = playbackState.currentSong;
+    
+    // Update tray menu
+    updateTrayMenu(mainWindow, playbackState.isPlaying, playbackState.currentSong);
+    
+    // Show notification when song changes
+    if (newSong && (!prevSong || prevSong.id !== newSong.id)) {
+      showSongNotification(newSong);
+    }
+  }
+});
+
+// Add minimize to tray handler
+ipcMain.on('minimize-to-tray', () => {
+  if (mainWindow) {
+    mainWindow.hide();
+  }
+});
+
 // Folder scanning
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog({
@@ -72,6 +360,48 @@ ipcMain.handle('select-folder', async () => {
   return null;
 });
 
+ipcMain.on('show-context-menu', (event, data) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window) return;
+
+  const template: (MenuItemConstructorOptions | MenuItem)[] = [
+    { 
+      label: 'Play Now', 
+      click: () => { 
+        event.reply('context-menu-command', { command: 'play', data });
+      } 
+    },
+    { 
+      label: 'Add to Queue', 
+      click: () => {
+        event.reply('context-menu-command', { command: 'add-to-queue', data });
+      }
+    },
+    { type: 'separator' },
+    { 
+      label: 'Add to Playlist',
+      submenu: data.playlists.map((playlist: string) => ({
+        label: playlist,
+        click: () => {
+          event.reply('context-menu-command', { 
+            command: 'add-to-playlist', 
+            data: { ...data, playlist } 
+          });
+        }
+      }))
+    },
+    { type: 'separator' },
+    { 
+      label: 'Song Info', 
+      click: () => {
+        event.reply('context-menu-command', { command: 'info', data });
+      }
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  menu.popup({ window });
+});
 
 function generateFileId(filePath: string): string {
   return crypto.createHash('md5').update(filePath).digest('hex');
@@ -327,7 +657,7 @@ ipcMain.handle('getImageDataUrl', async (_, filePath: string) => {
   }
 });
 
-async function checkForModifiedFiles(folderPath: string, library: Song[]): Promise<Song[]> {
+async function checkForModifiedFiles(_: string, library: Song[]): Promise<Song[]> {
   let updatedLibrary = [...library];
   let needsUpdate = false;
 
@@ -374,6 +704,11 @@ interface ElectronAPI {
   getImageDataUrl: (filePath: string) => Promise<string>;
   saveRecentlyPlayed: (recentlyPlayed: Song[]) => Promise<void>;
   loadRecentlyPlayed: () => Promise<Song[]>;
+  onContextMenuCommand: (callback: (data: any) => void) => () => void;
+  showContextMenu: (data: any) => void;
+  minimizeToTray: () => void;
+  updateTray: (playbackState: { isPlaying: boolean, currentSong: Song | null }) => void;
+  onTrayControl: (callback: (action: string) => void) => () => void;
 }
 
 declare global {

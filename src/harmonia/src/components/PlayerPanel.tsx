@@ -12,18 +12,12 @@ import {
   Shuffle,
   X,
   Layout,
+  MinimizeIcon,
 } from 'lucide-react';
 import { Song } from 'src/types/song';
 
 interface PlayerPanelProps {
-  togglePlayerView: () => void;
-  togglePlayerLayout: () => void;
   playerLayout: 'side' | 'bottom';
-  togglePlayPause: () => void;
-  prevSong: () => void;
-  nextSong: () => void;
-  setCurrentSongIndex: (index: number) => void;
-  audioRef: React.RefObject<HTMLAudioElement>;
   playerView: 'hidden' | 'sideview' | 'fullview';
   repeatMode: 'none' | 'all' | 'one';
   duration: string;
@@ -31,11 +25,21 @@ interface PlayerPanelProps {
   isPlaying: boolean;
   currentSongIndex: number | null;
   nowPlaying: Song[];
+  originalPlaylist: Song[];
+  audioRef: React.RefObject<HTMLAudioElement>;
+  isShuffled: boolean;
+  togglePlayerView: () => void;
+  togglePlayerLayout: () => void;
+  togglePlayPause: () => void;
+  prevSong: () => void;
+  nextSong: () => void;
+  minimizeToTray: () => void;
+  setCurrentSongIndex: (index: number) => void;
   setNowPlaying: Dispatch<SetStateAction<Song[]>>;
   setIsPlaying: (isPlaying: boolean) => void;
   setOriginalPlaylist: Dispatch<SetStateAction<Song[]>>;
+  setIsShuffled: Dispatch<SetStateAction<boolean>>;
   setRepeatMode: Dispatch<SetStateAction<'none' | 'all' | 'one'>>;
-  originalPlaylist: Song[];
 }
 
 const PlayerPanel: React.FC<PlayerPanelProps> = ({
@@ -55,23 +59,14 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
   nowPlaying,
   setNowPlaying,
   setIsPlaying,
-  setOriginalPlaylist,
+  minimizeToTray,
   repeatMode,
   setRepeatMode,
   originalPlaylist,
+  isShuffled, 
+  setIsShuffled
 }) => {
   const [progress, setProgress] = useState(0);
-  const [isShuffled, setIsShuffled] = useState(false);
-  
-
-  // useEffect(() => {
-  //   if (!isShuffled) {
-  //     setOriginalPlaylist([...nowPlaying]);
-  //   }
-  //   if (nowPlaying.length <= 1 && isShuffled) {
-  //     setIsShuffled(false);
-  //   }
-  // }, [nowPlaying, isShuffled]);
 
   useEffect(() => {
       const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
@@ -111,29 +106,11 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
         }
       };
 
-      const handleEnded = () => {
-        // if (repeatMode === 'one') {
-        //   audio.currentTime = 0;
-        //   audio.play().catch((err) => console.error('Replay failed:', err));
-        // } else if (repeatMode === 'all' && currentSongIndex !== null && nowPlaying.length > 0) {
-        //   const nextIndex = (currentSongIndex + 1) % nowPlaying.length;
-        //   setCurrentSongIndex(nextIndex);
-        // } else if (repeatMode === 'none') {
-        //   if (currentSongIndex !== null && currentSongIndex < nowPlaying.length - 1) {
-        //     setCurrentSongIndex(currentSongIndex + 1);
-        //   } else {
-        //     setIsPlaying(false);
-        //   }
-        // }
-      };
-
       audio.addEventListener('timeupdate', updateProgress);
-      audio.addEventListener('ended', handleEnded);
       updateProgress();
 
       return () => {
         audio.removeEventListener('timeupdate', updateProgress);
-        audio.removeEventListener('ended', handleEnded);
       };
     }
   }, [audioRef, currentSongIndex, nowPlaying.length, repeatMode, setCurrentSongIndex, setIsPlaying]);
@@ -178,8 +155,6 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
     if (nowPlaying.length <= 1) return;
 
     setIsShuffled((prevIsShuffled) => {
-      const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
-
       if (!prevIsShuffled) {
         const newNowPlaying = [...nowPlaying].sort(() => Math.random() - 0.5);
          let  newIndex = 0;
@@ -189,7 +164,6 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
         return true;
       } else {
         setNowPlaying([...originalPlaylist]);
-        // const newIndex = originalPlaylist.findIndex((song) => song.id === currentSong?.id);
         setCurrentSongIndex(0);
         return false;
       }
@@ -306,9 +280,17 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                 </button>
                 <button
                   onClick={togglePlayerView}
+                  title='Toggle View mode'
                   className="p-1 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white"
                 >
                   <Maximize2 size={16} />
+                </button>
+                <button 
+                  onClick={minimizeToTray}
+                  className="p-2 rounded-full hover:bg-gray-700"
+                  title="Minimize to Tray"
+                >
+                  <MinimizeIcon size={18} />
                 </button>
               </div>
             </div>
@@ -325,8 +307,15 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={togglePlayerView} className="p-1 rounded-full hover:bg-gray-800">
+                  <button onClick={togglePlayerView} title='Toggle View mode' className="p-1 rounded-full hover:bg-gray-800">
                     {playerView === 'fullview' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                  </button>
+                  <button 
+                    onClick={minimizeToTray}
+                    className="p-2 rounded-full hover:bg-gray-700"
+                    title="Minimize to Tray"
+                  >
+                    <MinimizeIcon size={18} />
                   </button>
                 </div>
               </div>

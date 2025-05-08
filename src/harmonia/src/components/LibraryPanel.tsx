@@ -1,7 +1,8 @@
 // src/harmonia/src/components/LibraryPanel.tsx
-import React, { useState, useEffect, useRef } from 'react'; // Import useRef
-import { Search, X, Play, Music } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, JSX } from 'react'; // Import useRef
+import { Search, X, Play, Music, Info, ListPlus, Plus } from 'lucide-react';
 import { Song } from 'src/types/song';
+import ContextMenu from './ContextMenu';
 
 interface Playlist {
   name: string;
@@ -43,12 +44,61 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
   const [selectedSongs, setSelectedSongs] = useState<Song[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Song | string; direction: 'ascending' | 'descending' } | null>(null);
- 
+  const [contextMenuSong, setContextMenuSong] = useState<Song | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    show: boolean;
+    song: Song | null;
+  }>({
+    x: 0,
+    y: 0,
+    show: false,
+    song: null
+  });
 
   // --- Ref for long press detection ---
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const didLongPressRef = useRef<boolean>(false); // To prevent click after long press
 
+  useEffect(() => {
+    // Set up listener for context menu commands
+    const removeListener = window.electronAPI?.onContextMenuCommand((data) => {
+      if (!data) return;
+      
+      const { command, data: menuData } = data;
+      const song = menuData.song;
+      
+      switch (command) {
+        case 'play':
+          // Find the index of the song in the filtered library
+          const songIndex = filteredLibrary.findIndex(s => s.id === song.id);
+          if (songIndex >= 0) {
+            playPlaylist({ name: "Library Selection", songs: filteredLibrary }, songIndex);
+          }
+          break;
+          
+        case 'add-to-queue':
+          // Add song to now playing without interrupting current playback
+          // This would need a new prop/function in your component
+          playPlaylist({ name: "Queue Addition", songs: [song] }, -1); // -1 to indicate append mode
+          break;
+          
+        case 'add-to-playlist':
+          addToPlaylist(menuData.playlist, [song]);
+          break;
+          
+        case 'info':
+          // You could implement a modal to show song info
+          console.log('Show info for song:', song);
+          break;
+      }
+    });
+    
+    return () => {
+      if (removeListener) removeListener();
+    };
+  }, [filteredLibrary, playPlaylist, addToPlaylist]);
 
   const applySearchFilter = (library: Song[], query: string): Song[] => {
     const q = query.toLowerCase().trim();
@@ -152,6 +202,108 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
       longPressTimerRef.current = null;
     }
     // No need to reset didLongPressRef here, onClick will handle it
+  };
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, song: Song) => {
+    e.preventDefault();
+    
+    // Store the song that was right-clicked
+    setContextMenuSong(song);
+    
+    // Show context menu via Electron
+    window.electronAPI?.showContextMenu({
+      song,
+      playlists: playlists.map(p => p.name)
+    });
+  }, [playlists]);
+
+  const closeContextMenu = () => {
+    setContextMenu(prev => ({ ...prev, show: false }));
+  };
+
+  interface ContextMenuOption {
+      label: string;
+      icon?: JSX.Element;
+      onClick?: () => void;
+      disabled?: boolean;
+      submenu?: Array<{
+        label: string;
+        onClick: () => void;
+        disabled?: boolean;
+      }>;
+  }
+  
+  // Create context menu options based on current state
+  const getContextMenuOptions: () => ContextMenuOption[] = () => {
+    if (!contextMenu.song) return [];
+    
+    const song = contextMenu.song;
+    
+    return [
+      {
+        label: 'Play Now',
+        icon: <Play size={16} />,
+        onClick: () => {
+          const songIndex = filteredLibrary.findIndex(s => s.id === song.id);
+          if (songIndex >= 0) {
+            playPlaylist({ name: "Library Selection", songs: filteredLibrary }, songIndex);
+          }
+        }
+      },
+      {
+        label: 'Add to Queue',
+        icon: <Plus size={16} />,
+        onClick: () => {
+          // Note: You might need to implement this functionality in your app
+          // This assumes your playPlaylist function can handle appending songs
+          playPlaylist({ name: "Queue Addition", songs: [song] }, -1); // using -1 to indicate append mode
+        }
+      },
+      { label: 'separator' },
+      {
+        label: 'Add to Playlist',
+        icon: <ListPlus size={16} />,
+        submenu: playlists.map(playlist => ({
+          label: playlist.name,
+          onClick: () => {
+            addToPlaylist(playlist.name, [song]);
+          },
+          disabled: playlist.songs.some(s => s.id === song.id) // Disable if song already in playlist
+        })),
+        disabled: playlists.length === 0
+      },
+      { label: 'separator' },
+      // Toggle selection in select mode
+      {
+        label: selectMode 
+          ? (selectedSongs.some(s => s.id === song.id) ? 'Deselect' : 'Select')
+          : 'Select',
+        onClick: () => {
+          if (!selectMode) {
+            setSelectMode(true);
+            setSelectedSongs([song]);
+          } else {
+            setSelectedSongs(prev => {
+              if (prev.some(s => s.id === song.id)) {
+                return prev.filter(s => s.id !== song.id);
+              } else {
+                return [...prev, song];
+              }
+            });
+          }
+        }
+      },
+      { label: 'separator' },
+      {
+        label: 'Song Info',
+        icon: <Info size={16} />,
+        onClick: () => {
+          // Implement song info display
+          console.log('Show song info:', song);
+          // You could open a modal here with detailed song information
+        }
+      }
+    ];
   };
 
   // --- Modified Click Handler ---
@@ -305,6 +457,7 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
                 onTouchCancel={handlePressEnd} // Cancel timer on touch cancel
                 // --- Use the modified click handler ---
                 onClick={() => handleRowClick(song, index)}
+                onContextMenu={(e) => handleContextMenu(e, song)}
               >
                 {/* Checkbox / Play Indicator */}
                 <div className="w-8 text-center flex-shrink-0 pointer-events-none"> {/* Prevent checkbox/icon stealing events */}
@@ -402,6 +555,13 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
           </div>
         </div>
       )}
+       <ContextMenu
+        x={contextMenu.x}
+        y={contextMenu.y}
+        show={contextMenu.show}
+        onClose={closeContextMenu}
+        options={getContextMenuOptions()}
+      />
     </div>
   );
 };
