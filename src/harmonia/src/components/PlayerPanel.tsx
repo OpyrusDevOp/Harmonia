@@ -55,7 +55,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
   nowPlaying,
   setNowPlaying,
   setIsPlaying,
-  setOriginalPlaylist,
+  // setOriginalPlaylist,
   repeatMode,
   setRepeatMode,
   originalPlaylist,

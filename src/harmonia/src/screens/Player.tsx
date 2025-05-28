@@ -295,7 +295,10 @@ const MusicPlayer = () => {
     const views = ['sideview', 'fullview'] as const;
     const currentIndex = views.indexOf(playerView as 'sideview' | 'fullview');
     const nextIndex = (currentIndex + 1) % views.length;
-    setPlayerView(views[nextIndex]);
+    const currentView = views[nextIndex];
+    if (currentView == 'fullview') document.body.requestFullscreen();
+    else document.exitFullscreen();
+    setPlayerView(currentView);
   };
 
   const playCurrentSong = () => {
