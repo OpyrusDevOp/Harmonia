@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, contextBridge } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import chokidar, { FSWatcher } from 'chokidar';
 import started from 'electron-squirrel-startup';
 import * as fs from 'fs-extra';
@@ -34,7 +34,7 @@ const createWindow = () => {
     thickFrame: true
   });
   mainWindow.setMenu(null);
-  // mainWindow.webContents.openDevTools()
+  mainWindow.webContents.openDevTools()
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -64,10 +64,12 @@ ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory'],
   });
+  console.log("folder selection result : ", result);
   if (!result.canceled) {
     const folderPath = result.filePaths[0];
     store.set('lastFolder', folderPath);
-    return scanFolder(folderPath);
+    const lib = await scanFolder(folderPath);
+    return { library: lib, folder: folderPath };
   }
   return null;
 });
@@ -119,7 +121,7 @@ async function scanFolder(folderPath: string): Promise<Song[]> {
       }
     }
   }
-  console.log(musicFiles)
+  // console.log(musicFiles)
   return musicFiles;
 }
 
@@ -173,7 +175,7 @@ async function startFolderWatch(folderPath: string, mainWindow: BrowserWindow) {
       }
     });
 
-    console.log('Watching folder:', folderPath)
+  console.log('Watching folder:', folderPath)
 }
 
 // Fonction pour traiter un seul fichier ajouté ou modifié
@@ -225,12 +227,13 @@ async function processSingleFile(filePath: string): Promise<Song[]> {
 
 
 ipcMain.handle('save-library', (_, lib) => {
+  console.log("saving : ", lib)
   store.set('musicLibrary', lib);
 });
 var onLibraryUpdated: () => void | null;
 ipcMain.handle('library-updated', (_, songs: Song[]) => {
   store.set('musicLibrary', songs);
-  if(onLibraryUpdated) onLibraryUpdated();
+  if (onLibraryUpdated) onLibraryUpdated();
 })
 
 ipcMain.handle('load-library', () => {
@@ -242,7 +245,7 @@ ipcMain.handle('save-recently-played', (_, recentlyPlayed: Song[]) => {
 });
 
 ipcMain.handle('load-recently-played', () => {
-  return store.get('recentlyPlayed', []);
+  return store.get('recentlyPlayed');
 });
 
 ipcMain.handle('save-playlists', (_, playlists: Playlist[]) => {
@@ -271,7 +274,7 @@ ipcMain.handle('update-playlist', (_, playlistName: string, songs: Song[]) => {
 
 ipcMain.handle('start-watcher', (_, folderPath: string, callback?: () => any) => {
   startFolderWatch(folderPath, mainWindow);
-  if(callback) onLibraryUpdated = callback;
+  if (callback) onLibraryUpdated = callback;
 })
 
 // Dans createWindow ou au démarrage de l'application

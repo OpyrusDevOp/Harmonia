@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Home, Library, Settings, Music, ArrowLeft } from 'lucide-react'; // Import ArrowLeft
 import { Song } from '../types/song';
 import LibraryPanel from '../components/LibraryPanel';
@@ -7,7 +7,6 @@ import PlayerPanel from '../components/PlayerPanel';
 import InputModal from '../components/InputModal';
 import PlaylistView from '../components/Playlist'; // Import the new component
 import Playlist from 'src/types/playlist';
-import { useFetcher } from 'react-router-dom';
 
 
 // Define the possible view modes
@@ -16,10 +15,10 @@ type ViewMode = 'featured' | 'library' | 'playlist';
 const MusicPlayer = () => {
   const [playerView, setPlayerView] = useState<'hidden' | 'sideview' | 'fullview'>('sideview');
   // Update viewMode type
-  const [viewMode, setViewMode] = useState<ViewMode>('featured');
+  const [viewMode, setViewMode] = useState<ViewMode>('library');
   // Add state for the currently viewed playlist
   const [musicLibrary, setMusicLibrary] = useState<Song[]>([]);
-  const [isFolderWatched, setIsFolderWatched] = useState(false);
+  // const [isFolderWatched, setIsFolderWatched] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('none');
   const [viewingPlaylist, setViewingPlaylist] = useState<Playlist | null>(null);
   const [playerLayout, setPlayerLayout] = useState<'side' | 'bottom'>('bottom');
@@ -42,15 +41,15 @@ const MusicPlayer = () => {
       const cachedPlaylists: Playlist[] = (await window.electronAPI.loadPlaylists()) || [];
       setPlaylists(cachedPlaylists);
       const cachedRecentlyPlayed: Song[] = (await window.electronAPI.loadRecentlyPlayed()) || [];
-      console.log(cachedRecentlyPlayed);
+      // console.log(cachedRecentlyPlayed);
       setRecentlyPlayed(cachedRecentlyPlayed);
 
       const result = await window.electronAPI?.initLibrary();
-console.log(result)
+      // console.log(result)
       if (result) {
         const library = result.library || [];
         setMusicLibrary(library);
-        window.electronAPI?.startWatcher(result.folder,loadLibrary);
+        window.electronAPI?.startWatcher(result.folder, loadLibrary);
         // setIsFolderWatched(!!);
       }
     }
@@ -83,26 +82,30 @@ console.log(result)
   }, []);
 
   const scanFolder = async () => {
-      let result = await window.electronAPI.selectFolder();
-      const library = result.library || [];
-      setMusicLibrary(library);
-      window.electronAPI?.startWatcher(result.folder);
-    };
+    let result = await window.electronAPI.selectFolder();
+    // console.log("result : ", result);
+    const library = result.library || [];
+    setMusicLibrary(library);
+    window.electronAPI.saveLibrary(library);
+    window.electronAPI?.startWatcher(result.folder);
+  };
 
-    const loadLibrary = async () => {
-      let result = await window.electronAPI.loadLibrary();
-      setMusicLibrary(result);
-    }
+  const loadLibrary = async () => {
+    let result = await window.electronAPI.loadLibrary();
+    setMusicLibrary(result);
+  }
 
   useEffect(() => {
-    window.electronAPI?.savePlaylists(playlists);
+    window.electronAPI.savePlaylists(playlists);
   }, [playlists]);
 
   useEffect(() => {
     const saveRecentlyPlayed = async () => {
-      await window.electronAPI?.saveRecentlyPlayed(recentlyPlayed);
+      if (recentlyPlayed == []) return;
       const cachedRecentlyPlayed: Song[] = (await window.electronAPI.loadRecentlyPlayed()) || [];
-      console.log("Saved Recently Played:", cachedRecentlyPlayed)
+      if (cachedRecentlyPlayed == recentlyPlayed) return;
+      await window.electronAPI.saveRecentlyPlayed(recentlyPlayed);
+      // console.log("Saved Recently Played:", cachedRecentlyPlayed)
     }
 
     saveRecentlyPlayed();
@@ -129,7 +132,7 @@ console.log(result)
         }
       };
       const handleSongEnd = () => {
-        nextSong(); // Automatically play next song when one ends
+        nextSong(true); // Automatically play next song when one ends
       };
       audio.addEventListener('timeupdate', updateTime);
       audio.addEventListener('ended', handleSongEnd); // Add ended listener
@@ -163,7 +166,7 @@ console.log(result)
       if ('mediaSession' in navigator && currentSongIndex !== null && nowPlaying[currentSongIndex]) {
         const currentSong = nowPlaying[currentSongIndex];
         let artworkUrl = '';
-  
+
         if (currentSong.coverPath) {
           try {
             // Fetch data URL from main process
@@ -173,7 +176,7 @@ console.log(result)
             console.error('Error fetching image data URL:', e);
           }
         }
-  
+
         try {
           navigator.mediaSession.metadata = new MediaMetadata({
 
@@ -187,20 +190,20 @@ console.log(result)
         } catch (err) {
           console.error('Failed to set MediaSession metadata:', err);
         }
-  
+
         // Set action handlers
         navigator.mediaSession.setActionHandler('play', togglePlayPause);
         navigator.mediaSession.setActionHandler('pause', togglePlayPause);
         navigator.mediaSession.setActionHandler('previoustrack', prevSong);
-        navigator.mediaSession.setActionHandler('nexttrack', nextSong);
+        navigator.mediaSession.setActionHandler('nexttrack', () => nextSong());
       } else {
         navigator.mediaSession.metadata = null;
         navigator.mediaSession.playbackState = 'none';
       }
     };
-  
+
     setupMediaSession();
-  
+
     return () => {
       if ('mediaSession' in navigator) {
         navigator.mediaSession.setActionHandler('play', null);
@@ -240,33 +243,51 @@ console.log(result)
     }
   };
 
-  const nextSong = () => {
+  const nextSong = (isAuto = false) => {
     const audio = audioRef.current;
-    console.log('Repeat mode:', repeatMode);
-    switch (repeatMode) {
-      case 'one':
-        audio.currentTime = 0;
-        audio.play().catch((err) => console.error('Replay failed:', err));
-        break;
-      case 'all': 
-        if (currentSongIndex !== null && nowPlaying.length > 0) {
-          const nextIndex = (currentSongIndex + 1) % nowPlaying.length;
-          setCurrentSongIndex(nextIndex);
-        } 
-        break;
-      default:
-        if (currentSongIndex !== null && currentSongIndex < nowPlaying.length - 1) {
-          setCurrentSongIndex(currentSongIndex + 1);
-        } else {
-          setIsPlaying(false);
-        }
+    // console.log('Repeat mode:', repeatMode);
+    // console.log("is Auto : ", isAuto)
+    if (isAuto) {
+      switch (repeatMode) {
+        case 'one':
+          audio.currentTime = 0;
+          audio.play().catch((err) => console.error('Replay failed:', err));
+          break;
+        case 'all':
+          if (currentSongIndex !== null && nowPlaying.length > 0) {
+            const nextIndex = (currentSongIndex + 1) % nowPlaying.length;
+            setCurrentSongIndex(nextIndex);
+          }
+          break;
+        default:
+          if (currentSongIndex !== null && currentSongIndex < nowPlaying.length - 1) {
+            setCurrentSongIndex(currentSongIndex + 1);
+          } else {
+            setIsPlaying(false);
+          }
+      }
+    } else {
+      switch (repeatMode) {
+        case 'all':
+          if (currentSongIndex !== null && nowPlaying.length > 0) {
+            const nextIndex = (currentSongIndex + 1) % nowPlaying.length;
+            setCurrentSongIndex(nextIndex);
+          }
+          break;
+        default:
+          if (currentSongIndex !== null && currentSongIndex < nowPlaying.length - 1) {
+            setCurrentSongIndex(currentSongIndex + 1);
+          } else {
+            setIsPlaying(false);
+          }
+      }
     }
   };
 
   const prevSong = () => {
     if (nowPlaying.length > 0) {
-        const prevIndex = currentSongIndex !== null ? (currentSongIndex - 1 + nowPlaying.length) % nowPlaying.length : nowPlaying.length - 1;
-        setCurrentSongIndex(prevIndex);
+      const prevIndex = currentSongIndex !== null ? (currentSongIndex - 1 + nowPlaying.length) % nowPlaying.length : nowPlaying.length - 1;
+      setCurrentSongIndex(prevIndex);
     }
   };
 
@@ -283,7 +304,7 @@ console.log(result)
       // Only change src if it's different or empty
       console.log(songToPlay.path)
       if (audioRef.current.src !== songToPlay.path) {
-          audioRef.current.src = songToPlay.path;
+        audioRef.current.src = songToPlay.path;
       }
       audioRef.current
         .play()
@@ -298,9 +319,9 @@ console.log(result)
           // setTimeout(nextSong, 1000);
         });
     } else {
-        // If no song is valid, ensure player is stopped
-        audioRef.current?.pause();
-        setIsPlaying(false);
+      // If no song is valid, ensure player is stopped
+      audioRef.current?.pause();
+      setIsPlaying(false);
     }
   };
 
@@ -329,24 +350,24 @@ console.log(result)
           // Avoid adding duplicates
           const songsToAdd = selectedSongs.filter(newSong => !p.songs.some(existingSong => existingSong.id === newSong.id));
           if (songsToAdd.length > 0) {
-              playlistUpdated = true;
-              return { ...p, songs: [...p.songs, ...songsToAdd] };
+            playlistUpdated = true;
+            return { ...p, songs: [...p.songs, ...songsToAdd] };
           }
         }
         return p;
       });
 
       if (playlistUpdated) {
-          setPlaylists(updatedPlaylists);
-          // Also update the viewingPlaylist if it's the one being modified
-          if (viewingPlaylist?.name === playlistName) {
-              setViewingPlaylist(updatedPlaylists.find(p => p.name === playlistName) || null);
-          }
-          // Persist change
-          window.electronAPI?.updatePlaylist(
-            playlistName,
-            updatedPlaylists.find((p) => p.name === playlistName)?.songs || []
-          );
+        setPlaylists(updatedPlaylists);
+        // Also update the viewingPlaylist if it's the one being modified
+        if (viewingPlaylist?.name === playlistName) {
+          setViewingPlaylist(updatedPlaylists.find(p => p.name === playlistName) || null);
+        }
+        // Persist change
+        window.electronAPI?.updatePlaylist(
+          playlistName,
+          updatedPlaylists.find((p) => p.name === playlistName)?.songs || []
+        );
       }
       setSelectedPlaylistForAdding(null); // Clear selection dropdown
     }
@@ -356,45 +377,45 @@ console.log(result)
   const deleteSongFromPlaylist = (playlistName: string, songId: string) => {
     let playlistFoundAndModified = false;
     const updatedPlaylists = playlists.map(p => {
-        if (p.name === playlistName) {
-            const originalLength = p.songs.length;
-            const updatedSongs = p.songs.filter(song => song.id !== songId);
-            if (updatedSongs.length < originalLength) {
-                playlistFoundAndModified = true;
-                return { ...p, songs: updatedSongs };
-            }
+      if (p.name === playlistName) {
+        const originalLength = p.songs.length;
+        const updatedSongs = p.songs.filter(song => song.id !== songId);
+        if (updatedSongs.length < originalLength) {
+          playlistFoundAndModified = true;
+          return { ...p, songs: updatedSongs };
         }
-        return p;
+      }
+      return p;
     });
 
     if (playlistFoundAndModified) {
-        setPlaylists(updatedPlaylists);
-        // If the currently viewed playlist was modified, update its state
-        if (viewingPlaylist?.name === playlistName) {
-            const updatedViewingPlaylist = updatedPlaylists.find(p => p.name === playlistName);
-            setViewingPlaylist(updatedViewingPlaylist || null); // Update or clear if playlist becomes empty? Decide behavior.
+      setPlaylists(updatedPlaylists);
+      // If the currently viewed playlist was modified, update its state
+      if (viewingPlaylist?.name === playlistName) {
+        const updatedViewingPlaylist = updatedPlaylists.find(p => p.name === playlistName);
+        setViewingPlaylist(updatedViewingPlaylist || null); // Update or clear if playlist becomes empty? Decide behavior.
 
-             // If the deleted song was playing from this playlist, update nowPlaying
-             const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
-             if (currentSong?.id === songId && nowPlaying.some(s => viewingPlaylist?.songs.some(vps => vps.id === s.id))) {
-                 // Find the index of the deleted song in the *original* viewing playlist song list
-                 const deletedIndexInPlaylist = viewingPlaylist.songs.findIndex(s => s.id === songId);
+        // If the deleted song was playing from this playlist, update nowPlaying
+        const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
+        if (currentSong?.id === songId && nowPlaying.some(s => viewingPlaylist?.songs.some(vps => vps.id === s.id))) {
+          // Find the index of the deleted song in the *original* viewing playlist song list
+          const deletedIndexInPlaylist = viewingPlaylist.songs.findIndex(s => s.id === songId);
 
-                 // Update nowPlaying to reflect the deletion
-                 const newNowPlaying = updatedViewingPlaylist?.songs || [];
-                 setNowPlaying(newNowPlaying);
+          // Update nowPlaying to reflect the deletion
+          const newNowPlaying = updatedViewingPlaylist?.songs || [];
+          setNowPlaying(newNowPlaying);
 
-                 // Decide what to play next
-                 if (newNowPlaying.length === 0) {
-                     setCurrentSongIndex(null); // Stop if playlist empty
-                 } else {
-                     // Try to play the song that's now at the same index, or the last one if index is out of bounds
-                     setCurrentSongIndex(Math.min(deletedIndexInPlaylist, newNowPlaying.length - 1));
-                 }
-             }
+          // Decide what to play next
+          if (newNowPlaying.length === 0) {
+            setCurrentSongIndex(null); // Stop if playlist empty
+          } else {
+            // Try to play the song that's now at the same index, or the last one if index is out of bounds
+            setCurrentSongIndex(Math.min(deletedIndexInPlaylist, newNowPlaying.length - 1));
+          }
         }
-        // Persist changes
-        window.electronAPI?.updatePlaylist(playlistName, updatedPlaylists.find(p => p.name === playlistName)?.songs || []);
+      }
+      // Persist changes
+      window.electronAPI?.updatePlaylist(playlistName, updatedPlaylists.find(p => p.name === playlistName)?.songs || []);
     }
   };
 
@@ -423,7 +444,7 @@ console.log(result)
     <FeaturedPanel
       playlists={playlists}
       selectedPlaylist={selectedPlaylistForAdding} // Pass the correct state
-      setSelectedPlaylist={setSelectedPlaylistForAdding} // Pass the correct setter
+      setPlaylists={setPlaylists}
       addToPlaylist={addToPlaylist} // Keep this for the '+' button functionality
       openCreatePlaylistModal={openCreatePlaylistModal}
       setNowPlaying={setNowPlaying} // Keep for recently played clicks
@@ -464,7 +485,7 @@ console.log(result)
       {/* Sidebar */}
       <div className="w-16 bg-gray-900 flex flex-col items-center py-4 flex-shrink-0">
         {/* ... Sidebar buttons ... */}
-         <div className="mb-8 flex flex-col items-center gap-10">
+        <div className="mb-8 flex flex-col items-center gap-10">
           <div className="flex flex-col gap-5 items-center">
             <button
               className={`p-3 rounded-full hover:bg-gray-800 ${viewMode === 'featured' ? 'bg-gray-700' : ''}`}

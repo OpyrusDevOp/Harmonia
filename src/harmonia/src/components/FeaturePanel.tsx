@@ -1,6 +1,6 @@
 // src/harmonia/src/components/FeaturePanel.tsx
-import React from 'react';
-import { Play, ListMusic } from 'lucide-react'; // Changed icon
+import React, { Dispatch, SetStateAction } from 'react';
+import { Play, ListMusic, Trash } from 'lucide-react'; // Changed icon
 import { Song } from 'src/types/song';
 
 interface Playlist {
@@ -11,7 +11,7 @@ interface Playlist {
 interface FeaturedPanelProps {
   playlists: Playlist[];
   selectedPlaylist: string | null; // Keep for adding songs
-  setSelectedPlaylist: (name: string | null) => void; // Keep for adding songs
+  setPlaylists: Dispatch<SetStateAction<Playlist[]>>;
   addToPlaylist: (playlistName: string, selectedSongs: Song[]) => void; // Keep for adding songs
   openCreatePlaylistModal: () => void;
   setNowPlaying: (songs: Song[]) => void; // Keep for recently played
@@ -23,8 +23,9 @@ interface FeaturedPanelProps {
 const FeaturedPanel: React.FC<FeaturedPanelProps> = ({
   playlists,
   selectedPlaylist,
-  setSelectedPlaylist,
-  addToPlaylist, // Keep this prop, but the '+' button might need rethinking UX-wise later
+  // setSelectedPlaylist,
+  // addToPlaylist, // Keep this prop, but the '+' button might need rethinking UX-wise later
+  setPlaylists,
   openCreatePlaylistModal,
   setNowPlaying,
   setCurrentSongIndex,
@@ -39,9 +40,12 @@ const FeaturedPanel: React.FC<FeaturedPanelProps> = ({
   };
 
   // Keep selectPlaylistForAdding for the '+' button functionality
-  const selectPlaylistForAdding = (name: string) => {
-    setSelectedPlaylist(name === selectedPlaylist ? null : name);
-  };
+  // const selectPlaylistForAdding = (name: string) => {
+  //   setSelectedPlaylist(name === selectedPlaylist ? null : name);
+  // };
+  function DeletePlaylist(playlist: Playlist) {
+    setPlaylists(current => current.filter(p => p !== playlist));
+  }
 
   return (
     <>
@@ -69,10 +73,10 @@ const FeaturedPanel: React.FC<FeaturedPanelProps> = ({
                     backgroundColor: song.coverPath ? undefined : '#8b5cf6', // Fallback color
                   }}
                 >
-                   {/* Play icon overlay */}
-                   <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center transition-opacity duration-200 opacity-0 group-hover:opacity-100">
-                       <Play size={32} className="text-white" fill="white"/>
-                   </div>
+                  {/* Play icon overlay */}
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center transition-opacity duration-200 opacity-0 group-hover:opacity-100">
+                    <Play size={32} className="text-white" fill="white" />
+                  </div>
                 </div>
                 <p className="text-sm font-medium text-center truncate w-full">{song.title}</p>
                 <p className="text-xs text-gray-400 text-center truncate w-full">{song.artist || 'Unknown'}</p>
@@ -108,19 +112,20 @@ const FeaturedPanel: React.FC<FeaturedPanelProps> = ({
                 <button
                   className={`p-1 rounded-full hover:bg-gray-600 ml-2 ${selectedPlaylist === playlist.name ? 'bg-green-600 text-white hover:bg-green-500' : 'text-gray-400'}`}
                   onClick={(e) => {
+                    DeletePlaylist(playlist);
                     e.stopPropagation(); // Prevent navigation click
-                    selectPlaylistForAdding(playlist.name);
+                    // selectPlaylistForAdding(playlist.name);
                   }}
                   title={selectedPlaylist === playlist.name ? `Selected for adding songs` : `Select '${playlist.name}' to add songs`}
                 >
-                  <span className="text-lg font-bold leading-none">{selectedPlaylist === playlist.name ? '✓' : '+'}</span>
+                  <Trash />
                 </button>
               </div>
             ))
           ) : (
-             <div className="text-gray-400 text-center py-4">
-                <p>No playlists created yet.</p>
-             </div>
+            <div className="text-gray-400 text-center py-4">
+              <p>No playlists created yet.</p>
+            </div>
           )}
           {/* New Playlist Button */}
           <button

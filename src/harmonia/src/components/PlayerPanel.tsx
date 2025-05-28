@@ -62,7 +62,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
 }) => {
   const [progress, setProgress] = useState(0);
   const [isShuffled, setIsShuffled] = useState(false);
-  
+
 
   // useEffect(() => {
   //   if (!isShuffled) {
@@ -74,29 +74,29 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
   // }, [nowPlaying, isShuffled]);
 
   useEffect(() => {
-      const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
+    const currentSong = currentSongIndex !== null ? nowPlaying[currentSongIndex] : null;
 
-      if(isShuffled)  {
-        const otherSongs = nowPlaying.filter((_, index) => index !== currentSongIndex);
-        const shuffledOthers = [...otherSongs].sort(() => Math.random() - 0.5);
-        let newNowPlaying: Song[];
-        let newIndex: number | null;
+    if (isShuffled) {
+      const otherSongs = nowPlaying.filter((_, index) => index !== currentSongIndex);
+      const shuffledOthers = [...otherSongs].sort(() => Math.random() - 0.5);
+      let newNowPlaying: Song[];
+      let newIndex: number | null;
 
-        if (currentSong) {
-          newNowPlaying = [currentSong, ...shuffledOthers];
-          newIndex = 0;
-        } else {
-          newNowPlaying = shuffledOthers;
-          newIndex = newNowPlaying.length > 0 ? 0 : null;
-        }
-
-        setNowPlaying(newNowPlaying);
-        setCurrentSongIndex(newIndex);
+      if (currentSong) {
+        newNowPlaying = [currentSong, ...shuffledOthers];
+        newIndex = 0;
       } else {
-        setNowPlaying([...originalPlaylist]);
-        const newIndex = originalPlaylist.findIndex((song) => song.id === currentSong?.id);
-        setCurrentSongIndex(newIndex !== -1 ? newIndex : (originalPlaylist.length > 0 ? 0 : null));
+        newNowPlaying = shuffledOthers;
+        newIndex = newNowPlaying.length > 0 ? 0 : null;
       }
+
+      setNowPlaying(newNowPlaying);
+      setCurrentSongIndex(newIndex);
+    } else {
+      setNowPlaying([...originalPlaylist]);
+      const newIndex = originalPlaylist.findIndex((song) => song.id === currentSong?.id);
+      setCurrentSongIndex(newIndex !== -1 ? newIndex : (originalPlaylist.length > 0 ? 0 : null));
+    }
   }, [originalPlaylist]);
 
   useEffect(() => {
@@ -182,7 +182,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
 
       if (!prevIsShuffled) {
         const newNowPlaying = [...nowPlaying].sort(() => Math.random() - 0.5);
-         let  newIndex = 0;
+        let newIndex = 0;
 
         setNowPlaying(newNowPlaying);
         setCurrentSongIndex(newIndex);
@@ -202,13 +202,12 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
     <>
       {playerView !== 'hidden' && (
         <div
-          className={`bg-gray-900 transition-all duration-300 ease-in-out flex ${
-            playerView === 'fullview'
-              ? 'fixed inset-0 z-50 w-full h-full p-4 sm:p-6 flex-col overscroll-none'
-              : playerLayout === 'side'
+          className={`bg-gray-900 transition-all duration-300 ease-in-out flex ${playerView === 'fullview'
+            ? 'fixed inset-0 z-50 w-full h-full p-4 sm:p-6 flex-col overscroll-none'
+            : playerLayout === 'side'
               ? 'w-80 border-l border-gray-800 flex-col'
               : 'fixed bottom-0 left-0 right-0 h-20 border-t border-gray-800 z-40 items-center'
-          }`}
+            }`}
         >
           {playerLayout === 'bottom' && playerView !== 'fullview' && (
             <div className="flex items-center h-full px-4 w-full">
@@ -247,7 +246,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                       {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
                     </button>
                     <button
-                      onClick={nextSong}
+                      onClick={() => nextSong()}
                       className="p-1 rounded-full hover:bg-gray-800 text-gray-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={nowPlaying.length <= 1}
                     >
@@ -267,9 +266,8 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                       style={{ width: `${progress}%` }}
                     >
                       <div
-                        className={`w-2.5 h-2.5 bg-white rounded-full absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity ${
-                          (isPlaying || progress > 0) ? 'opacity-100' : ''
-                        }`}
+                        className={`w-2.5 h-2.5 bg-white rounded-full absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity ${(isPlaying || progress > 0) ? 'opacity-100' : ''
+                          }`}
                       />
                     </div>
                   </div>
@@ -279,18 +277,16 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
               <div className="flex items-center gap-2 mr-2">
                 <button
                   onClick={cycleRepeatMode}
-                  className={`p-1 rounded-full hover:bg-gray-800 ${
-                    repeatMode !== 'none' ? 'text-purple-400' : 'text-gray-400 hover:text-white'
-                  }`}
+                  className={`p-1 rounded-full hover:bg-gray-800 ${repeatMode !== 'none' ? 'text-purple-400' : 'text-gray-400 hover:text-white'
+                    }`}
                   title={`Repeat: ${repeatMode}`}
                 >
                   {repeatMode === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
                 </button>
                 <button
                   onClick={toggleShuffle}
-                  className={`p-1 rounded-full hover:bg-gray-800 ${
-                    isShuffled ? 'text-purple-400' : 'text-gray-400 hover:text-white'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  className={`p-1 rounded-full hover:bg-gray-800 ${isShuffled ? 'text-purple-400' : 'text-gray-400 hover:text-white'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
                   title={`Shuffle: ${isShuffled ? 'On' : 'Off'}`}
                   disabled={nowPlaying.length <= 1}
                 >
@@ -332,23 +328,20 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
               </div>
 
               <div
-                className={`flex flex-1 min-h-0 overflow-y-auto justify-center ${
-                  playerView === 'fullview'
-                    ? 'flex-col sm:flex-row gap-2 sm:gap-8 px-2 sm:px-4 py-0 sm:py-2'
-                    : 'flex-col items-center'
-                }`}
+                className={`flex flex-1 min-h-0 overflow-y-auto justify-center ${playerView === 'fullview'
+                  ? 'flex-col sm:flex-row gap-2 sm:gap-8 px-2 sm:px-4 py-0 sm:py-2'
+                  : 'flex-col items-center'
+                  }`}
               >
                 <div
-                  className={`${
-                    playerView === 'fullview'
-                      ? 'flex flex-col items-center justify-center flex-1 sm:w-1/2 sm:max-w-lg sm:flex-shrink-0 overscroll-none overflow-hidden'
-                      : 'w-full flex flex-col items-center flex-shrink-0'
-                  }`}
+                  className={`${playerView === 'fullview'
+                    ? 'flex flex-col items-center justify-center flex-1 sm:w-1/2 sm:max-w-lg sm:flex-shrink-0 overscroll-none overflow-hidden'
+                    : 'w-full flex flex-col items-center flex-shrink-0'
+                    }`}
                 >
                   <div
-                    className={`aspect-square rounded-lg shadow-lg mb-2 sm:mb-4 bg-purple-800 ${
-                      playerView === 'fullview' ? 'w-full overscroll-none overflow-hidden max-w-[16rem] sm:max-w-md' : 'w-full max-w-xs'
-                    }`}
+                    className={`aspect-square rounded-lg shadow-lg mb-2 sm:mb-4 bg-purple-800 ${playerView === 'fullview' ? 'w-full overscroll-none overflow-hidden max-w-[16rem] sm:max-w-md' : 'w-full max-w-xs'
+                      }`}
                     style={{
                       backgroundImage: currentSong?.coverPath ? `url(${currentSong.coverPath})` : undefined,
                       backgroundSize: 'cover',
@@ -380,7 +373,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                         {isPlaying ? <Pause size={20} fill="currentColor" className="sm:w-6 sm:h-6" /> : <Play size={20} fill="currentColor" className="ml-0.5 sm:w-6 sm:h-6" />}
                       </button>
                       <button
-                        onClick={nextSong}
+                        onClick={() => nextSong()}
                         className="p-1 sm:p-2 rounded-full hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled={nowPlaying.length <= 1}
                       >
@@ -399,9 +392,8 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                           style={{ width: `${progress}%` }}
                         >
                           <div
-                            className={`w-2 h-2 sm:w-2.5 sm:h-2.5 bg-white rounded-full absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity ${
-                              (isPlaying || progress > 0) ? 'opacity-100' : ''
-                            }`}
+                            className={`w-2 h-2 sm:w-2.5 sm:h-2.5 bg-white rounded-full absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity ${(isPlaying || progress > 0) ? 'opacity-100' : ''
+                              }`}
                           />
                         </div>
                       </div>
@@ -410,18 +402,16 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                     <div className="flex gap-3 sm:gap-4 mt-1 sm:mt-2">
                       <button
                         onClick={cycleRepeatMode}
-                        className={`p-1 rounded-full hover:bg-gray-800 ${
-                          repeatMode !== 'none' ? 'text-purple-400' : 'text-gray-400 hover:text-white'
-                        }`}
+                        className={`p-1 rounded-full hover:bg-gray-800 ${repeatMode !== 'none' ? 'text-purple-400' : 'text-gray-400 hover:text-white'
+                          }`}
                         title={`Repeat: ${repeatMode}`}
                       >
                         {repeatMode === 'one' ? <Repeat1 size={16} className="sm:w-5 sm:h-5" /> : <Repeat size={16} className="sm:w-5 sm:h-5" />}
                       </button>
                       <button
                         onClick={toggleShuffle}
-                        className={`p-1 rounded-full hover:bg-gray-800 ${
-                          isShuffled ? 'text-purple-400' : 'text-gray-400 hover:text-white'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        className={`p-1 rounded-full hover:bg-gray-800 ${isShuffled ? 'text-purple-400' : 'text-gray-400 hover:text-white'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
                         title={`Shuffle: ${isShuffled ? 'On' : 'Off'}`}
                         disabled={nowPlaying.length <= 1}
                       >
@@ -432,11 +422,10 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                 </div>
 
                 <div
-                  className={`flex-1 min-h-0 overflow-hidden ${
-                    playerView === 'fullview'
-                      ? 'hidden sm:flex sm:flex-col'
-                      : 'flex flex-col mt-6'
-                  }`}
+                  className={`flex-1 min-h-0 overflow-hidden ${playerView === 'fullview'
+                    ? 'hidden sm:flex sm:flex-col'
+                    : 'flex flex-col mt-6'
+                    }`}
                 >
                   <h3 className="text-md font-bold mb-2 flex-shrink-0 px-1">
                     {playerView === 'fullview' ? 'Up Next' : 'Your Queue'}
@@ -448,9 +437,8 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                         return (
                           <div
                             key={`${song.id}-${index}`}
-                            className={`group flex items-center p-2 rounded-lg hover:bg-gray-800 cursor-pointer transition-colors ${
-                              isCurrent ? 'bg-gray-700/50 border-l-2 border-l-purple-500' : ''
-                            }`}
+                            className={`group flex items-center p-2 rounded-lg hover:bg-gray-800 cursor-pointer transition-colors ${isCurrent ? 'bg-gray-700/50 border-l-2 border-l-purple-500' : ''
+                              }`}
                             onClick={() => setCurrentSongIndex(index)}
                           >
                             <div

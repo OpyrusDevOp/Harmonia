@@ -35,15 +35,15 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
   selectedPlaylist,
   setSelectedPlaylist,
   addToPlaylist,
-  scanFolder 
+  scanFolder
 }) => {
-  
+
   const [filteredLibrary, setFilteredLibrary] = useState<Song[]>(musicLibrary);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedSongs, setSelectedSongs] = useState<Song[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Song | string; direction: 'ascending' | 'descending' } | null>(null);
- 
+
 
   // --- Ref for long press detection ---
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -63,28 +63,28 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
   };
 
   const applySort = (library: Song[], config: { key: keyof Song | string; direction: 'ascending' | 'descending' }): Song[] => {
-      const sortedSongs = [...library].sort((a, b) => {
-          const key = config.key as keyof Song;
-          const valueA = a[key];
-          const valueB = b[key];
+    const sortedSongs = [...library].sort((a, b) => {
+      const key = config.key as keyof Song;
+      const valueA = a[key];
+      const valueB = b[key];
 
-          if (valueA == null && valueB == null) return 0;
-          if (valueA == null) return config.direction === 'ascending' ? -1 : 1;
-          if (valueB == null) return config.direction === 'ascending' ? 1 : -1;
+      if (valueA == null && valueB == null) return 0;
+      if (valueA == null) return config.direction === 'ascending' ? -1 : 1;
+      if (valueB == null) return config.direction === 'ascending' ? 1 : -1;
 
-          let comparison = 0;
-          if (typeof valueA === 'string' && typeof valueB === 'string') {
-              comparison = valueA.toLowerCase().localeCompare(valueB.toLowerCase());
-          } else if (typeof valueA === 'number' && typeof valueB === 'number') {
-              comparison = valueA - valueB;
-          } else {
-              if (valueA < valueB) comparison = -1;
-              if (valueA > valueB) comparison = 1;
-          }
+      let comparison = 0;
+      if (typeof valueA === 'string' && typeof valueB === 'string') {
+        comparison = valueA.toLowerCase().localeCompare(valueB.toLowerCase());
+      } else if (typeof valueA === 'number' && typeof valueB === 'number') {
+        comparison = valueA - valueB;
+      } else {
+        if (valueA < valueB) comparison = -1;
+        if (valueA > valueB) comparison = 1;
+      }
 
-          return config.direction === 'ascending' ? comparison : comparison * -1;
-      });
-      return sortedSongs;
+      return config.direction === 'ascending' ? comparison : comparison * -1;
+    });
+    return sortedSongs;
   };
 
   useEffect(() => {
@@ -96,7 +96,7 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
       processedLibrary = applySort(processedLibrary, sortConfig);
     }
     setFilteredLibrary(processedLibrary);
-   // console.log(filteredLibrary)
+    // console.log(filteredLibrary)
   }, [searchQuery, sortConfig, musicLibrary]);
 
   // --- Component Functions (remain mostly the same) ---
@@ -193,7 +193,7 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
 
       {/* Search Bar & Select Button */}
       <div className="mb-4 flex gap-2 flex-shrink-0">
-         <div className="relative flex-1">
+        <div className="relative flex-1">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search size={16} className="text-gray-400" />
           </div>
@@ -246,7 +246,7 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
                 disabled={!selectMode || filteredLibrary.length === 0}
               />
             ) : (
-               <div className="w-4 h-4"></div>
+              <div className="w-4 h-4"></div>
             )}
           </div>
           <div className="w-1/3 cursor-pointer hover:text-purple-400 pr-2" onClick={() => requestSort('title')}>
@@ -283,19 +283,18 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
             const isNowPlaying =
               currentSongIndex !== null &&
               nowPlaying[currentSongIndex]?.id === song.id;
-             const isCurrentQueueThisList = nowPlaying.length === filteredLibrary.length &&
-                                            nowPlaying.every((npSong, idx) => filteredLibrary[idx]?.id === npSong.id);
-             const isActuallyPlayingThisSong = isNowPlaying && isCurrentQueueThisList;
+            const isCurrentQueueThisList = nowPlaying.length === filteredLibrary.length &&
+              nowPlaying.every((npSong, idx) => filteredLibrary[idx]?.id === npSong.id);
+            const isActuallyPlayingThisSong = isNowPlaying && isCurrentQueueThisList;
 
 
             return (
               <div
                 key={song.id}
                 className={`group flex items-center px-4 py-2 text-xs border-b border-gray-700 transition-colors cursor-pointer ${ // Always cursor-pointer now
-                   isSelected ? 'bg-purple-900 hover:bg-purple-800' : 'hover:bg-gray-700'
-                } ${
-                  isActuallyPlayingThisSong ? 'bg-gray-700 border-l-4 border-l-purple-500' : ''
-                }`}
+                  isSelected ? 'bg-purple-900 hover:bg-purple-800' : 'hover:bg-gray-700'
+                  } ${isActuallyPlayingThisSong ? 'bg-gray-700 border-l-4 border-l-purple-500' : ''
+                  }`}
                 // --- Add Long Press Event Handlers ---
                 onMouseDown={() => handlePressStart(song)}
                 onMouseUp={handlePressEnd}
@@ -370,32 +369,35 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
                   Play Selected
                 </button>
                 <div className="flex items-center gap-1">
-                   <select
-                     className="px-2 py-1 rounded-lg bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                     value={selectedPlaylist || ''}
-                     onChange={(e) => setSelectedPlaylist(e.target.value || null)}
-                     disabled={playlists.length === 0}
-                     title={playlists.length === 0 ? "Create a playlist first" : "Select playlist to add songs"}
-                   >
-                     <option value="">Add to Playlist...</option>
-                     {playlists.map((playlist) => (
-                       <option key={playlist.name} value={playlist.name}>
-                         {playlist.name}
-                       </option>
-                     ))}
-                   </select>
-                   <button
-                     className="px-3 py-1 rounded-lg bg-green-600 hover:bg-green-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                     onClick={() => {
-                       if (selectedPlaylist) {
-                         addToPlaylist(selectedPlaylist, selectedSongs);
-                       }
-                     }}
-                     disabled={!selectedPlaylist || selectedSongs.length === 0}
-                     title={!selectedPlaylist ? "Select a playlist first" : `Add ${selectedSongs.length} song(s) to ${selectedPlaylist}`}
-                   >
-                     Add
-                   </button>
+                  <select
+                    className="px-2 py-1 rounded-lg bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                    value={selectedPlaylist || ''}
+                    onChange={(e) => setSelectedPlaylist(e.target.value || null)}
+                    disabled={playlists.length === 0}
+                    title={playlists.length === 0 ? "Create a playlist first" : "Select playlist to add songs"}
+                  >
+                    <option value="">Add to Playlist...</option>
+                    {playlists.map((playlist) => (
+                      <option key={playlist.name} value={playlist.name}>
+                        {playlist.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="px-3 py-1 rounded-lg bg-green-600 hover:bg-green-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      if (selectedPlaylist) {
+                        addToPlaylist(selectedPlaylist, selectedSongs);
+                        setSelectMode(false);
+                        setSelectedSongs([]);
+
+                      }
+                    }}
+                    disabled={!selectedPlaylist || selectedSongs.length === 0}
+                    title={!selectedPlaylist ? "Select a playlist first" : `Add ${selectedSongs.length} song(s) to ${selectedPlaylist}`}
+                  >
+                    Add
+                  </button>
                 </div>
               </>
             )}
