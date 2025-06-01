@@ -48,7 +48,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-build
+          name: ${{ matrix.os }}
           path: src/harmonia/out/make/
 
   create-release:
@@ -68,12 +68,9 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/**/*.exe
-            artifacts/**/*.dmg
-            artifacts/**/*.AppImage
-            artifacts/**/*.deb
-            artifacts/**/*.rpm
-            artifacts/**/*.zip
+            **/**/*.exe
+            **/**/**/*.zip
+            **/deb/**/*.deb
           generate_release_notes: true
           draft: false
           prerelease: false
