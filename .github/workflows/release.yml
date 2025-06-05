@@ -47,6 +47,9 @@ jobs:
   create-release:
     needs: release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      discussions: write
     
     steps:
       - name: Check out Git repository
