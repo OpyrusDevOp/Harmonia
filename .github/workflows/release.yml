@@ -1,44 +1,81 @@
 name: Release
-
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*' # Triggers on version tags like v1.0.0
   workflow_dispatch: # Allows manual triggering
 jobs:
   release:
     runs-on: ${{ matrix.os }}
-
+    
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
-
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '18'
           cache: 'npm'
-
+          cache-dependency-path: 'src/harmonia/package-lock.json'
       - name: Install dependencies
-        run: npm ci
         working-directory: ./src/harmonia
-
-      - name: Build/Release Electron app
-        uses: samuelmeuli/action-electron-builder@v1
-        with:
-          github_token: ${{ secrets.github_token }}
-          release: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          app_root: ./src/harmonia
+        run: npm ci
+      - name: Build Electron app
+        working-directory: ./src/harmonia
+        run: npm run make
         env:
-          GH_TOKEN: ${{ secrets.github_token }}
-
+          # Code signing certificates (optional)
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Windows code signing
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          # Apple notarization (macOS)
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASS: ${{ secrets.APPLE_ID_PASS }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Verify build artifacts
+        working-directory: ./src/harmonia
+        run: |
+          if [ ! -d "out/make" ]; then
+            echo "Build artifacts not found!"
+            exit 1
+          fi
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ runner.os }}-build
-          path: src/harmonia/out/
+          name: ${{ matrix.os }}
+          path: src/harmonia/out/make/
           if-no-files-found: error
+  create-release:
+    needs: release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          if-no-files-found: error
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.zip
+            artifacts/**/*.dmg
+            artifacts/**/*.AppImage
+            artifacts/**/deb/*.deb
+            artifacts/**/rpm/*.rpm
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
