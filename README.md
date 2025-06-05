@@ -2,6 +2,7 @@
 
 A modern, cross-platform music player built with Electron, React, and TypeScript. Harmonia lets you scan, organize, and play your local music library with a beautiful, responsive interface.
 
+I wanted a good looking player on Linux so there we go (Rhythm was good but mehh)
 ## Features
 
 - 🎵 **Scan and manage your local music library**
@@ -14,7 +15,16 @@ A modern, cross-platform music player built with Electron, React, and TypeScript
 - 🏁 **Cross-platform packaging** (Windows, macOS, Linux)
 
 ## Screenshots
-<!-- Add screenshots here if available -->
+#### HOME
+![image](https://github.com/user-attachments/assets/af07cade-a54f-4c2a-94c2-cf80fabb4d69)
+#### Playlist 
+![image](https://github.com/user-attachments/assets/49a13267-f313-48bb-abda-92dcb3943c1b)
+#### Library
+![image](https://github.com/user-attachments/assets/d753f57b-817c-4bb9-a905-44ee08547bbb)
+#### Side Player
+![image](https://github.com/user-attachments/assets/ff66e305-929a-48ac-b934-319bb798d66b)
+#### Fullscreen Player
+![image](https://github.com/user-attachments/assets/83e27ad2-a19f-41ba-9696-527c23a8b588)
 
 ## Getting Started
 
@@ -26,7 +36,7 @@ A modern, cross-platform music player built with Electron, React, and TypeScript
 
 1. Clone the repository:
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/OpyrusDevOp/Harmonia.git
    cd Harmonia/src/harmonia
    ```
 2. Install dependencies:
