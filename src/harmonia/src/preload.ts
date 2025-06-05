@@ -16,7 +16,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Nouvelles méthodes
   initLibrary: () => ipcRenderer.invoke('init-library'),
   startWatcher: (folderPath: string, callback?: () => void) => ipcRenderer.invoke('start-watcher', folderPath, callback),
-  onLibraryUpdated: (songs: Song[]) => ipcRenderer.invoke('library-updated', songs),
+
+  // New global library methods
+  getGlobalLibrary: () => ipcRenderer.invoke('get-global-library'),
+  updateGlobalLibrary: (library: Song[]) => ipcRenderer.invoke('update-global-library', library),
+
+  // Event listeners
+  onLibraryUpdated: (callback: (lib: Song[]) => any) => {
+    ipcRenderer.on('library-updated', (_, library: Song[]) => callback(library));
+  },
   removeLibraryUpdatedListener: () => {
     ipcRenderer.removeAllListeners('library-updated');
   }

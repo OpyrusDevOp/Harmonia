@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Home, Library, Settings, Music, ArrowLeft } from 'lucide-react'; // Import ArrowLeft
 import { Song } from '../types/song';
 import LibraryPanel from '../components/LibraryPanel';
@@ -6,7 +6,8 @@ import FeaturedPanel from '../components/FeaturePanel';
 import PlayerPanel from '../components/PlayerPanel';
 import InputModal from '../components/InputModal';
 import PlaylistView from '../components/Playlist'; // Import the new component
-import Playlist from 'src/types/playlist';
+import Playlist from '../types/playlist';
+import { useGlobalLibrary } from '../hooks/useGlobalLibrary';
 
 
 // Define the possible view modes
@@ -16,8 +17,6 @@ const MusicPlayer = () => {
   const [playerView, setPlayerView] = useState<'hidden' | 'sideview' | 'fullview'>('sideview');
   // Update viewMode type
   const [viewMode, setViewMode] = useState<ViewMode>('library');
-  // Add state for the currently viewed playlist
-  const [musicLibrary, setMusicLibrary] = useState<Song[]>([]);
   // const [isFolderWatched, setIsFolderWatched] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('none');
   const [viewingPlaylist, setViewingPlaylist] = useState<Playlist | null>(null);
@@ -35,35 +34,47 @@ const MusicPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [previousViewMode, setPreviousViewMode] = useState<ViewMode>('featured'); // To know where to go back to
 
-  // --- Load/Save Effects (Keep as is) ---
+  // Use the global library hook
+  const { library: musicLibrary, updateLibrary: setMusicLibrary } = useGlobalLibrary();
+
+  // Load library function (for your existing watcher callback)
+  const loadLibrary = useCallback(async () => {
+    const result = await window.electronAPI?.initLibrary();
+    if (result && result.library) {
+      await setMusicLibrary(result.library);
+    }
+  }, [setMusicLibrary]);
+
   useEffect(() => {
     async function loadData() {
-      const cachedPlaylists: Playlist[] = (await window.electronAPI.loadPlaylists()) || [];
+      const cachedPlaylists = (await window.electronAPI.loadPlaylists()) || [];
       setPlaylists(cachedPlaylists);
-      const cachedRecentlyPlayed: Song[] = (await window.electronAPI.loadRecentlyPlayed()) || [];
-      // console.log(cachedRecentlyPlayed);
+
+      const cachedRecentlyPlayed = (await window.electronAPI.loadRecentlyPlayed()) || [];
       setRecentlyPlayed(cachedRecentlyPlayed);
 
       const result = await window.electronAPI?.initLibrary();
-      // console.log(result)
       if (result) {
         const library = result.library || [];
-        setMusicLibrary(library);
-        window.electronAPI?.startWatcher(result.folder, loadLibrary);
-        // setIsFolderWatched(!!);
+        // Use the global library setter
+        await setMusicLibrary(library);
+
+        if (result.folder) {
+          window.electronAPI?.startWatcher(result.folder, loadLibrary);
+        }
       }
     }
+
     loadData();
 
+    // Media session setup (your existing code)
     if ('mediaSession' in navigator) {
       navigator.mediaSession.setActionHandler('play', () => {
-        // Check if already playing to avoid unnecessary state changes/audio calls
         if (!isPlaying && audioRef.current) {
           togglePlayPause();
         }
       });
       navigator.mediaSession.setActionHandler('pause', () => {
-        // Check if already paused
         if (isPlaying && audioRef.current) {
           togglePlayPause();
         }
@@ -74,12 +85,8 @@ const MusicPlayer = () => {
       navigator.mediaSession.setActionHandler('nexttrack', () => {
         nextSong();
       });
-      // Optional: Add handlers for seekforward, seekbackward, stop if needed
-      // navigator.mediaSession.setActionHandler('seekbackward', (details) => { /* ... */ });
-      // navigator.mediaSession.setActionHandler('seekforward', (details) => { /* ... */ });
-      // navigator.mediaSession.setActionHandler('stop', () => { /* ... stop playback completely */ });
     }
-  }, []);
+  }, [setMusicLibrary, loadLibrary]);
 
   const scanFolder = async () => {
     let result = await window.electronAPI.selectFolder();
@@ -89,11 +96,6 @@ const MusicPlayer = () => {
     window.electronAPI.saveLibrary(library);
     window.electronAPI?.startWatcher(result.folder);
   };
-
-  const loadLibrary = async () => {
-    let result = await window.electronAPI.loadLibrary();
-    setMusicLibrary(result);
-  }
 
   useEffect(() => {
     window.electronAPI.savePlaylists(playlists);
