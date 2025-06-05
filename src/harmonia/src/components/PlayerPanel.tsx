@@ -10,7 +10,6 @@ import {
   Repeat,
   Repeat1,
   Shuffle,
-  X,
   Layout,
 } from 'lucide-react';
 import { Song } from 'src/types/song';
@@ -422,22 +421,22 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                 </div>
 
                 <div
-                  className={`flex-1 min-h-0 overflow-hidden ${playerView === 'fullview'
+                  className={`flex1 min-h-0 overscroll-none overflow-hidden ${playerView === 'fullview'
                     ? 'hidden sm:flex sm:flex-col'
-                    : 'flex flex-col mt-6'
+                    : 'flex flex-col mt-6 w-full'
                     }`}
                 >
                   <h3 className="text-md font-bold mb-2 flex-shrink-0 px-1">
                     {playerView === 'fullview' ? 'Up Next' : 'Your Queue'}
                   </h3>
                   {nowPlaying.length > 0 ? (
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                    <div className="overflow-x-hidden overscroll-x-none overflow-y-auto custom-scrollbar space-y-1 pr-1 w-full">
                       {nowPlaying.map((song, index) => {
                         const isCurrent = index === currentSongIndex;
                         return (
                           <div
                             key={`${song.id}-${index}`}
-                            className={`group flex items-center p-2 rounded-lg hover:bg-gray-800 cursor-pointer transition-colors ${isCurrent ? 'bg-gray-700/50 border-l-2 border-l-purple-500' : ''
+                            className={`group flex items-center p-2 rounded-lg hover:bg-gray-800 cursor-pointer transition-colors w-full ${isCurrent ? 'bg-gray-700/50 border-l-2 border-l-purple-500' : ''
                               }`}
                             onClick={() => setCurrentSongIndex(index)}
                           >
@@ -449,13 +448,13 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                                 backgroundPosition: 'center',
                               }}
                             ></div>
-                            <div className="flex-grow min-w-0">
+                            <div className="flex-grow min-w-0 max-w-[calc(100%-60px)]">
                               <p className={`text-sm font-medium truncate ${isCurrent ? 'text-purple-300' : ''}`}>
                                 {song.title}
                               </p>
                               <p className="text-xs text-gray-400 truncate">{song.artist || 'Unknown'}</p>
                             </div>
-                            <div className={`w-5 h-5 flex items-center justify-center ${!isCurrent ? 'opacity-0 group-hover:opacity-100' : ''}`}>
+                            <div className={`w-5 h-5 flex items-center justify-center flex-shrink-0 ${!isCurrent ? 'opacity-0 group-hover:opacity-100' : ''}`}>
                               {isCurrent ? (
                                 <span className="flex h-3 w-3 relative">
                                   <span className={`absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75 ${isPlaying ? 'animate-ping' : ''}`}></span>

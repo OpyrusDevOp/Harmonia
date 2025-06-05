@@ -42,6 +42,7 @@ const MusicPlayer = () => {
     const result = await window.electronAPI?.initLibrary();
     if (result && result.library) {
       await setMusicLibrary(result.library);
+
     }
   }, [setMusicLibrary]);
 
@@ -53,14 +54,14 @@ const MusicPlayer = () => {
       const cachedRecentlyPlayed = (await window.electronAPI.loadRecentlyPlayed()) || [];
       setRecentlyPlayed(cachedRecentlyPlayed);
 
-      const result = await window.electronAPI?.initLibrary();
+      const result = await window.electronAPI.initLibrary();
+      console.log(result)
       if (result) {
         const library = result.library || [];
         // Use the global library setter
         await setMusicLibrary(library);
-
         if (result.folder) {
-          window.electronAPI?.startWatcher(result.folder, loadLibrary);
+          await window.electronAPI?.startWatcher(result.folder, loadLibrary);
         }
       }
     }

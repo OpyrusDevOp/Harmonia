@@ -19,12 +19,11 @@ export class WindowManager {
       thickFrame: true
     });
 
-    this.mainWindow.setMenu(null);
 
     if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
       this.mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-      this.mainWindow.webContents.openDevTools();
     } else {
+      this.mainWindow.setMenu(null);
       this.mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
     }
 

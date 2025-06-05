@@ -36,10 +36,7 @@ export class IPCHandlers {
     ipcMain.handle('save-library', (_, lib) => this.libraryService.saveLibrary(lib));
     ipcMain.handle('load-library', () => this.libraryService.loadLibrary());
     ipcMain.handle('library-updated', (_, songs) => this.libraryService.handleLibraryUpdated(songs));
-    ipcMain.handle('init-library', () => {
-      this.libraryService.initLibrary();
-      this.fileWatcherService.startWatcher(this.folderService.getLastFolder(), this.windowManager.getMainWindow());
-    });
+    ipcMain.handle('init-library', () => this.libraryService.initLibrary());
 
     // Recently played
     ipcMain.handle('save-recently-played', (_, recentlyPlayed) =>
@@ -68,9 +65,9 @@ export class IPCHandlers {
   }
 
   private setupLibrarySynchronization(): void {
-    // When library is updated via existing methods, sync with global manager
+    // When library is updated via existing methods, sync with global manager ipcMain.handle('sync-library-to-global', async (_, library) => {
     ipcMain.handle('sync-library-to-global', async (_, library) => {
       this.libraryManager.initializeLibrary(library);
     });
-  }
+  };
 }
