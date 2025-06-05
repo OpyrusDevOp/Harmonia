@@ -25,14 +25,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        working-directory: src/harmonia
+        working-directory: ./src/harmonia
 
       - name: Build/Release Electron app
         uses: samuelmeuli/action-electron-builder@v1
         with:
           github_token: ${{ secrets.github_token }}
           release: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          working-directory: src/harmonia
+          working-directory: ./src/harmonia
         env:
           GH_TOKEN: ${{ secrets.github_token }}
 
