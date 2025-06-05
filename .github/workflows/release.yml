@@ -68,8 +68,8 @@ jobs:
             artifacts/**/*.zip
             artifacts/**/*.dmg
             artifacts/**/*.AppImage
-            artifacts/**/deb/*.deb
-            artifacts/**/rpm/*.rpm
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
           generate_release_notes: true
           draft: false
           prerelease: false
