@@ -1,6 +1,6 @@
 // src/harmonia/src/components/LibraryPanel.tsx
 import React, { useState, useEffect, useRef } from 'react'; // Import useRef
-import { Search, X, Play, Music } from 'lucide-react';
+import { Search, X, Play, Music, Plus } from 'lucide-react';
 import { Song } from 'src/types/song';
 
 interface Playlist {
@@ -43,6 +43,17 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
   const [selectedSongs, setSelectedSongs] = useState<Song[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Song | string; direction: 'ascending' | 'descending' } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    song?: Song;
+    songs?: Song[];
+  }>({
+    visible: false,
+    x: 0,
+    y: 0
+  });
 
 
   // --- Ref for long press detection ---
@@ -98,6 +109,78 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
     setFilteredLibrary(processedLibrary);
     // console.log(filteredLibrary)
   }, [searchQuery, sortConfig, musicLibrary]);
+
+  // Add click outside handler to close context menu
+  useEffect(() => {
+    const handleClickOutside = (_event: MouseEvent) => {
+      if (contextMenu.visible) {
+        setContextMenu(prev => ({ ...prev, visible: false }));
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [contextMenu.visible]);
+
+  const handleContextMenu = (e: React.MouseEvent, song?: Song) => {
+    e.preventDefault();
+    if (selectMode) {
+      // If in select mode, show context menu for all selected songs
+      setContextMenu({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        songs: selectedSongs
+      });
+    } else if (song) {
+      // If not in select mode, show context menu for single song
+      setContextMenu({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        song
+      });
+    }
+  };
+
+  const handleContextMenuAction = (action: 'play' | 'addToPlaylist') => {
+    if (action === 'play') {
+      if (contextMenu.songs) {
+        // Play all selected songs
+        playPlaylist({ name: "Selection", songs: contextMenu.songs }, 0);
+        // Exit select mode if we had selected songs
+        if (contextMenu.songs.length > 0) {
+          setSelectMode(false);
+          setSelectedSongs([]);
+        }
+      } else if (contextMenu.song) {
+        // Play single song
+        const index = filteredLibrary.findIndex(s => s.id === contextMenu.song?.id);
+        if (index !== -1) {
+          playPlaylist({ name: "Library Search", songs: filteredLibrary }, index);
+        }
+      }
+    }
+    setContextMenu(prev => ({ ...prev, visible: false }));
+  };
+
+  const handleContextAddToPlaylist = (playlistName: string) => {
+    if (!playlistName) return;
+    
+    if (contextMenu.songs) {
+      addToPlaylist(playlistName, contextMenu.songs);
+      // Exit select mode if we had selected songs
+      if (contextMenu.songs.length > 0) {
+        setSelectMode(false);
+        setSelectedSongs([]);
+      }
+    } else if (contextMenu.song) {
+      addToPlaylist(playlistName, [contextMenu.song]);
+    }
+    setContextMenu(prev => ({ ...prev, visible: false }));
+  };
 
   // --- Component Functions (remain mostly the same) ---
   // const scanFolder = async () => {
@@ -304,6 +387,7 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
                 onTouchCancel={handlePressEnd} // Cancel timer on touch cancel
                 // --- Use the modified click handler ---
                 onClick={() => handleRowClick(song, index)}
+                onContextMenu={(e) => handleContextMenu(e, song)}
               >
                 {/* Checkbox / Play Indicator */}
                 <div className="w-8 text-center flex-shrink-0 pointer-events-none"> {/* Prevent checkbox/icon stealing events */}
@@ -341,6 +425,75 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
         )}
       </div>
 
+      {/* Context Menu */}
+      {contextMenu.visible && (
+        <div
+          className="fixed bg-gray-800 rounded-lg shadow-lg py-1 z-50 min-w-[200px]"
+          style={{
+            top: contextMenu.y,
+            left: contextMenu.x,
+          }}
+        >
+          {contextMenu.songs ? (
+            // Context menu for multiple selected songs
+            <>
+              <button
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center gap-2"
+                onClick={() => handleContextMenuAction('play')}
+              >
+                <Play size={16} />
+                Play Selected
+              </button>
+              {playlists.length > 0 && (
+                <div className="px-4 py-2">
+                  <div className="text-xs text-gray-400 mb-1">Add to Playlist</div>
+                  <select
+                    className="w-full px-2 py-1 rounded bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    value=""
+                    onChange={(e) => handleContextAddToPlaylist(e.target.value)}
+                  >
+                    <option value="">Select playlist...</option>
+                    {playlists.map((playlist) => (
+                      <option key={playlist.name} value={playlist.name}>
+                        {playlist.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
+          ) : (
+            // Context menu for single song
+            <>
+              <button
+                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center gap-2"
+                onClick={() => handleContextMenuAction('play')}
+              >
+                <Play size={16} />
+                Play
+              </button>
+              {playlists.length > 0 && (
+                <div className="px-4 py-2">
+                  <div className="text-xs text-gray-400 mb-1">Add to Playlist</div>
+                  <select
+                    className="w-full px-2 py-1 rounded bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    value=""
+                    onChange={(e) => handleContextAddToPlaylist(e.target.value)}
+                  >
+                    <option value="">Select playlist...</option>
+                    {playlists.map((playlist) => (
+                      <option key={playlist.name} value={playlist.name}>
+                        {playlist.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Action Bar (remains the same) */}
       {selectMode && (
         <div className="mt-auto p-3 bg-gray-800 rounded-lg flex items-center justify-between flex-shrink-0 border-t border-gray-700">
@@ -372,7 +525,7 @@ const LibraryPanel: React.FC<LibraryPanelProps> = ({
                   <select
                     className="px-2 py-1 rounded-lg bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
                     value={selectedPlaylist || ''}
-                    onChange={(e) => setSelectedPlaylist(e.target.value || null)}
+                    onChange={(e) => handleContextAddToPlaylist(e.target.value || null)}
                     disabled={playlists.length === 0}
                     title={playlists.length === 0 ? "Create a playlist first" : "Select playlist to add songs"}
                   >
